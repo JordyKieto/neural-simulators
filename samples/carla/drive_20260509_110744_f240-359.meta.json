@@ -1,0 +1,25 @@
+{
+  "source_recording": "drive_20260509_110744.processed.tfrecord",
+  "source_md5": "81a8ecefbf3d480bfab94d8cdd82a67e",
+  "frames": [
+    240,
+    359
+  ],
+  "num_frames": 120,
+  "hz": 20,
+  "seconds": 6.0,
+  "content": "straight driving into a left turn (manifest direction labels: straight <= 266, left 267-391)",
+  "in_training_set": true,
+  "route_id": "a2bdd2db7a35",
+  "tags": [
+    "agents001",
+    "map01"
+  ],
+  "features": {
+    "vision": "uint8 (96,96,3)",
+    "lidar": "float32 (64,64,1)",
+    "telemetry": "float32 (5,)",
+    "waypoints": "float32 (25,3)",
+    "controls": "float32 (3,) throttle, brake, steer"
+  }
+}

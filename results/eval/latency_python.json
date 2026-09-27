@@ -1,0 +1,71 @@
+{
+  "threads_1": {
+    "carla_step (transition)": {
+      "median_ms": 6.088,
+      "p90_ms": 6.219,
+      "iters": 300
+    },
+    "carla_reset (lidar_encoder)": {
+      "median_ms": 0.13,
+      "p90_ms": 0.132,
+      "iters": 300
+    },
+    "tinyskies_step (latent_sim + decoder)": {
+      "median_ms": 23.734,
+      "p90_ms": 25.402,
+      "iters": 300
+    },
+    "tinyskies_latent_sim": {
+      "median_ms": 0.501,
+      "p90_ms": 0.644,
+      "iters": 300
+    },
+    "tinyskies_decoder": {
+      "median_ms": 23.492,
+      "p90_ms": 24.302,
+      "iters": 300
+    },
+    "tinyskies_reset (encoder)": {
+      "median_ms": 1.576,
+      "p90_ms": 1.637,
+      "iters": 300
+    }
+  },
+  "threads_4": {
+    "carla_step (transition)": {
+      "median_ms": 2.569,
+      "p90_ms": 3.0,
+      "iters": 300
+    },
+    "carla_reset (lidar_encoder)": {
+      "median_ms": 0.07,
+      "p90_ms": 0.144,
+      "iters": 300
+    },
+    "tinyskies_step (latent_sim + decoder)": {
+      "median_ms": 15.61,
+      "p90_ms": 19.586,
+      "iters": 300
+    },
+    "tinyskies_latent_sim": {
+      "median_ms": 0.354,
+      "p90_ms": 0.369,
+      "iters": 300
+    },
+    "tinyskies_decoder": {
+      "median_ms": 8.968,
+      "p90_ms": 9.821,
+      "iters": 300
+    },
+    "tinyskies_reset (encoder)": {
+      "median_ms": 0.797,
+      "p90_ms": 0.83,
+      "iters": 300
+    }
+  },
+  "machine": {
+    "cpu": "Apple M1",
+    "onnxruntime": "1.30.0",
+    "python": "3.11.13"
+  }
+}

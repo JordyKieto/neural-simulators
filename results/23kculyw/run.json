@@ -1,0 +1,8 @@
+{
+  "entity_project_run": "drift-ai-models/drift-tinyskies-latent-sim/23kculyw",
+  "name": "tinyskies-latent-sim-v1-001",
+  "state": "finished",
+  "created_at": "2026-05-24T03:44:49Z",
+  "heartbeat_at": "2026-05-24T03:56:08Z",
+  "exported_rows": 3
+}

@@ -1,0 +1,28 @@
+{
+  "batch_size": 500,
+  "checkpoint_prefix": "checkpoints/tinyskies_latent_sim_v1/",
+  "delta_l2_weight": 0.01,
+  "epochs": 300,
+  "feedback_latent_noise_std": 0.005,
+  "latent_channels": 64,
+  "latent_grid": [
+    6,
+    6
+  ],
+  "latent_history_steps": 4,
+  "latent_loss_weight": 1,
+  "learning_rate": 0.0001,
+  "model_dim": 128,
+  "rollout_horizon": 13,
+  "s3_processed_prefix": "tinyskies/processed/",
+  "scheduled_sampling_prob": 0.1,
+  "train_split": 0.9,
+  "transformer_ff_dim": 256,
+  "transformer_heads": 4,
+  "transformer_layers": 4,
+  "vae_path": "s3://drift-datasets/checkpoints/tinyskies_rgb_vae_v1/tinyskies_rgb_vae_v1_epoch_006.keras",
+  "vision_resize": [
+    96,
+    96
+  ]
+}

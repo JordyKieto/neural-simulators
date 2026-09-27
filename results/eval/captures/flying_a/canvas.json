@@ -1,0 +1,62 @@
+{
+  "box": {
+    "x": 89,
+    "y": 447.5625,
+    "width": 574,
+    "height": 574
+  },
+  "video": "/Users/jordy/Documents/dev/neural-simulators/results/eval/captures/flying_a/page@ee94a20d7a9f0d013833ea33d789f330.webm",
+  "record_seconds": 20,
+  "script": [
+    [
+      0,
+      2,
+      "w"
+    ],
+    [
+      2,
+      3.5,
+      "a"
+    ],
+    [
+      3.5,
+      5,
+      "w"
+    ],
+    [
+      5,
+      6.5,
+      "d"
+    ],
+    [
+      6.5,
+      8,
+      "w"
+    ],
+    [
+      8.5,
+      10.5,
+      "a"
+    ],
+    [
+      11,
+      12,
+      "s"
+    ],
+    [
+      12,
+      14,
+      "w"
+    ],
+    [
+      14,
+      16,
+      "d"
+    ],
+    [
+      16.5,
+      19.5,
+      "w"
+    ]
+  ]
+}

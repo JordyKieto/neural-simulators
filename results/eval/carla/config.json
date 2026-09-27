@@ -1,0 +1,28 @@
+{
+  "recordings": {
+    "drive_20260509_110744.processed.tfrecord": "train",
+    "drive_20260509_231436.processed.tfrecord": "val",
+    "drive_20260517_052600.processed.tfrecord": "unseen",
+    "drive_20260517_063215.processed.tfrecord": "unseen"
+  },
+  "horizon": 100,
+  "stride": 10,
+  "long_steps": 2000,
+  "hz": 20,
+  "seeds": [
+    "drive_20260509_110744.processed.tfrecord:179",
+    "drive_20260509_110744.processed.tfrecord:384",
+    "drive_20260509_231436.processed.tfrecord:125",
+    "drive_20260509_110744.processed.tfrecord:76",
+    "drive_20260509_231436.processed.tfrecord:267",
+    "drive_20260509_110744.processed.tfrecord:389"
+  ],
+  "scripts": [
+    "cruise_0.5",
+    "full_throttle",
+    "idle",
+    "left_0.5",
+    "right_0.5",
+    "weave"
+  ]
+}

@@ -1,0 +1,8 @@
+model,ONNX values (weights + shape constants),fp32 size (MB)
+carla/world_transition.onnx,1551854,6.26124
+carla/lidar_encoder.onnx,27462,0.11596
+tinyskies/encoder.onnx,660480,2.648023
+tinyskies/decoder.onnx,1282933,5.16128
+tinyskies/latent_sim.onnx,1842071,7.407747
+CARLA total,1579316,6.3772
+TinySkies total,3785484,15.21705

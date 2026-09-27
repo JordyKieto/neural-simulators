@@ -1,0 +1,28 @@
+{
+  "frames": 1700,
+  "encoding": {
+    "ridge_r2_occupied_cells": {
+      "latent": 0.8030998574875424,
+      "raw_bev_pooled": 0.8938527195886298
+    },
+    "ridge_r2_left_right_asymmetry": {
+      "latent": 0.7667966467571652,
+      "raw_bev_pooled": 0.9648147427328402
+    }
+  },
+  "scale": {
+    "input_mean_abs_diff_between_scans_over_mean_abs_scan": 1.2906020879745483,
+    "latent_mean_abs_diff_between_scans_over_mean_abs_latent": 0.0017206683987751603,
+    "constant_predictor_mse (floor of the training LiDAR loss)": 8.192935638362542e-06,
+    "empty_scan_predictor_mse": 8.142713340930641e-05
+  },
+  "propagation": {
+    "one_step_error_in_latent_stds": 2329.570037841797,
+    "mean_per_dim_correlation_pred_vs_true_by_step": {
+      "1": 0.02732068086420705,
+      "5": 0.0004392973052531751,
+      "20": -0.006442542731017006,
+      "40": -0.023675425402288862
+    }
+  }
+}

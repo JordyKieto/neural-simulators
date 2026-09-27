@@ -1,0 +1,72 @@
+{
+  "machine": {
+    "cpu": "Apple M1",
+    "cores": 8,
+    "platform": "darwin 25.2.0"
+  },
+  "browser": "Chromium (headless, Playwright)",
+  "note": "Closed-loop, batch 1. CARLA step = world_transition. TinySkies step = latent_sim + decoder. Excludes canvas drawing.",
+  "results": [
+    {
+      "ep": "wasm",
+      "threads": 1,
+      "crossOriginIsolated": true,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+      "ort": {
+        "common": "1.22.0",
+        "web": "1.22.0"
+      },
+      "carla_step": {
+        "median_ms": 11.735,
+        "p90_ms": 13.84,
+        "mean_ms": 12.177,
+        "steps": 300
+      },
+      "tinyskies_step": {
+        "median_ms": 47.515,
+        "p90_ms": 50.89,
+        "mean_ms": 47.97,
+        "steps": 300
+      }
+    },
+    {
+      "ep": "wasm",
+      "threads": 4,
+      "crossOriginIsolated": true,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+      "ort": {
+        "common": "1.22.0",
+        "web": "1.22.0"
+      },
+      "carla_step": {
+        "median_ms": 5.02,
+        "p90_ms": 12.18,
+        "mean_ms": 7.021,
+        "steps": 300
+      },
+      "tinyskies_step": {
+        "median_ms": 18.31,
+        "p90_ms": 20.12,
+        "mean_ms": 19.026,
+        "steps": 300
+      }
+    },
+    {
+      "ep": "webgpu",
+      "threads": 1,
+      "crossOriginIsolated": true,
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/147.0.0.0 Safari/537.36",
+      "ort": {
+        "common": "1.22.0",
+        "web": "1.22.0"
+      },
+      "carla_step": {
+        "median_ms": 16.355,
+        "p90_ms": 20.52,
+        "mean_ms": 17.052,
+        "steps": 300
+      },
+      "error": "Error: [WebGPU] Kernel \"[Split] tinyskies_latent_sim_v1_1/latent_dynamics_gru_1_1/while/gru_cell_1/split_1\" failed. Error: Program Split has zero-sized tensor(s) in inputs or outputs. This is not supported now."
+    }
+  ]
+}

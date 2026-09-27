@@ -1,0 +1,22 @@
+{
+  "_runtime": 4019.475459854,
+  "_step": 27650,
+  "_timestamp": 1779682616.7311318,
+  "_wandb.runtime": 4019,
+  "progress/batch_step": 27650,
+  "progress/epoch": 28,
+  "progress/epoch_completed": 27,
+  "progress/windows_seen": 5529984,
+  "time/elapsed_sec": 3780.0521528720856,
+  "time/epoch_sec": 1682.528376340866,
+  "train/delta_l2_loss": 0.00173288828227669,
+  "train/final_step_latent_loss": 0.027878709137439728,
+  "train/latent_loss": 0.02935090661048889,
+  "train/loss": 0.029368234798312187,
+  "train/one_step_latent_loss": 0.01080856192857027,
+  "val/delta_l2_loss": 0.0001711017237539636,
+  "val/final_step_latent_loss": 0.07420012708753347,
+  "val/latent_loss": 0.051848705671727655,
+  "val/loss": 0.05185041688382626,
+  "val/one_step_latent_loss": 0.005701382388360798
+}

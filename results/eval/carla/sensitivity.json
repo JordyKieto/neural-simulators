@@ -1,0 +1,101 @@
+{
+  "frames": 512,
+  "shuffle": {
+    "vision": {
+      "next_vision": 0.10489677637815475,
+      "next_lidar_latent": 0.0,
+      "next_telemetry": 0.0,
+      "next_waypoints": 0.0
+    },
+    "lidar_latent": {
+      "next_vision": 1.7498030501883477e-05,
+      "next_lidar_latent": 0.00042780322837643325,
+      "next_telemetry": 0.0002756949979811907,
+      "next_waypoints": 0.0003109083045274019
+    },
+    "telemetry": {
+      "next_vision": 0.0027464942540973425,
+      "next_lidar_latent": 0.01428564079105854,
+      "next_telemetry": 0.11595945060253143,
+      "next_waypoints": 0.015461660921573639
+    },
+    "waypoints": {
+      "next_vision": 0.010901159606873989,
+      "next_lidar_latent": 0.05027268826961517,
+      "next_telemetry": 0.0811312198638916,
+      "next_waypoints": 0.2944723963737488
+    },
+    "controls": {
+      "next_vision": 0.007409531623125076,
+      "next_lidar_latent": 0.04116369038820267,
+      "next_telemetry": 0.0568837895989418,
+      "next_waypoints": 0.04518575593829155
+    }
+  },
+  "zero": {
+    "vision": {
+      "next_vision": 0.26453495025634766,
+      "next_lidar_latent": 0.0,
+      "next_telemetry": 0.0,
+      "next_waypoints": 0.0
+    },
+    "lidar_latent": {
+      "next_vision": 0.007515346631407738,
+      "next_lidar_latent": 0.1966560333967209,
+      "next_telemetry": 0.08677195757627487,
+      "next_waypoints": 0.13337290287017822
+    },
+    "telemetry": {
+      "next_vision": 0.002375873038545251,
+      "next_lidar_latent": 0.009709501639008522,
+      "next_telemetry": 0.09975354373455048,
+      "next_waypoints": 0.010210306383669376
+    },
+    "waypoints": {
+      "next_vision": 0.028081992641091347,
+      "next_lidar_latent": 0.6729788780212402,
+      "next_telemetry": 0.10292615741491318,
+      "next_waypoints": 0.4388056993484497
+    },
+    "controls": {
+      "next_vision": 0.004135938826948404,
+      "next_lidar_latent": 0.030568469315767288,
+      "next_telemetry": 0.04970530793070793,
+      "next_waypoints": 0.03211735561490059
+    }
+  },
+  "action": {
+    "full_throttle": {
+      "next_vision": 0.0059772878885269165,
+      "next_lidar_latent": 0.05185146629810333,
+      "next_telemetry": 0.10363080352544785,
+      "next_waypoints": 0.050855640321969986
+    },
+    "full_brake": {
+      "next_vision": 0.005262345541268587,
+      "next_lidar_latent": 0.08633236587047577,
+      "next_telemetry": 0.16320255398750305,
+      "next_waypoints": 0.07759716361761093
+    },
+    "hard_left": {
+      "next_vision": 0.028646942228078842,
+      "next_lidar_latent": 0.11515527963638306,
+      "next_telemetry": 0.1256336271762848,
+      "next_waypoints": 0.15681332349777222
+    },
+    "hard_right": {
+      "next_vision": 0.025356903672218323,
+      "next_lidar_latent": 0.10152558237314224,
+      "next_telemetry": 0.10614769160747528,
+      "next_waypoints": 0.13872431218624115
+    }
+  },
+  "lidar": {
+    "input_nonzero_fraction": 0.05645938648897059,
+    "input_mean": 0.00423049833625555,
+    "latent_std_across_scans_mean_over_dims": 0.0014876690693199635,
+    "latent_mean_abs": 0.9870318174362183,
+    "mean_abs_diff_real_vs_empty_scan_latent": 0.0044396547600626945,
+    "mean_abs_diff_between_random_real_scans": 0.0018837281968444586
+  }
+}

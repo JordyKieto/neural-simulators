@@ -1,0 +1,17 @@
+# Analysis, evaluation and training for the Neural Simulator paper repo (Python 3.11)
+tensorflow>=2.16
+keras>=3.3
+onnx>=1.16
+onnxruntime>=1.18
+tf2onnx>=1.16
+numpy
+pandas
+pyarrow
+matplotlib
+pillow
+scikit-image
+jupyter
+pygame
+nbconvert
+# only for re-exporting training histories (maintainers); not needed to use the repo
+wandb

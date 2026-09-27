@@ -1,0 +1,106 @@
+{
+  "source_manifest": "/Users/jordy/Documents/dev/drift-world/.asset-cache/windows_manifest.parquet",
+  "source_manifest_md5": "76442aaad69cf39b49fddebcc95dc406",
+  "dataset_version": [
+    "mlp_processed_v1"
+  ],
+  "record_dates": [
+    "20260509",
+    "20260510"
+  ],
+  "recordings": 448,
+  "windows_stack5": 236882,
+  "frames": 238674,
+  "hours_at_20hz": 3.315,
+  "frames_per_recording": {
+    "min": 398,
+    "median": 599.0,
+    "max": 600
+  },
+  "quality_flags": {
+    "ok": {
+      "count": 236882,
+      "share": 1.0
+    }
+  },
+  "direction": {
+    "straight": {
+      "count": 211947,
+      "share": 0.8947
+    },
+    "left": {
+      "count": 13866,
+      "share": 0.0585
+    },
+    "right": {
+      "count": 11069,
+      "share": 0.0467
+    }
+  },
+  "steer_bucket": {
+    "straight": {
+      "count": 211951,
+      "share": 0.8948
+    },
+    "medium_left": {
+      "count": 8435,
+      "share": 0.0356
+    },
+    "medium_right": {
+      "count": 5513,
+      "share": 0.0233
+    },
+    "soft_left": {
+      "count": 5422,
+      "share": 0.0229
+    },
+    "soft_right": {
+      "count": 4356,
+      "share": 0.0184
+    },
+    "hard_right": {
+      "count": 1196,
+      "share": 0.005
+    },
+    "hard_left": {
+      "count": 9,
+      "share": 0.0
+    }
+  },
+  "speed_bucket": {
+    "crawl": {
+      "count": 236317,
+      "share": 0.9976
+    },
+    "stopped": {
+      "count": 565,
+      "share": 0.0024
+    }
+  },
+  "tag_key": {
+    "": {
+      "count": 150636,
+      "share": 0.6359
+    },
+    "0,2,a,m,map01,p": {
+      "count": 49072,
+      "share": 0.2072
+    },
+    "agents001,map01": {
+      "count": 37174,
+      "share": 0.1569
+    }
+  },
+  "target_controls_mean": {
+    "throttle": 0.235,
+    "brake": 0.0072,
+    "steer": -0.0004,
+    "speed": 0.1952
+  },
+  "abs_target_steer": {
+    "mean": 0.0301,
+    "p90": 0.0916,
+    "p99": 0.4289,
+    "share_above_0.1": 0.0963
+  }
+}

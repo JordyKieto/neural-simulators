@@ -1,0 +1,198 @@
+{
+  "artifacts/carla/world_transition.onnx": {
+    "description": "CARLA world_v3, epoch 20: one-step transition (vision, lidar_latent, telemetry, waypoints, controls) -> next state",
+    "origin": "s3://drift-datasets/checkpoints/world_v3/world_v3_epoch_020_transition.onnx",
+    "copied_from": "drift-sim/public/models/world_transition.onnx",
+    "bytes": 6261240,
+    "md5": "9ce807ab6166877ea770f6e3c2182824",
+    "params": 1551854,
+    "opset": 17,
+    "producer": "tf2onnx 1.17.0 None",
+    "inputs": {
+      "vision": [
+        "unk__950",
+        96,
+        96,
+        3
+      ],
+      "lidar_latent": [
+        "unk__951",
+        64
+      ],
+      "telemetry": [
+        "unk__952",
+        5
+      ],
+      "waypoints": [
+        "unk__953",
+        25,
+        3
+      ],
+      "controls": [
+        "unk__954",
+        3
+      ]
+    },
+    "outputs": {
+      "next_vision": [
+        "unk__955",
+        96,
+        96,
+        3
+      ],
+      "next_lidar_latent": [
+        "unk__956",
+        64
+      ],
+      "next_telemetry": [
+        "unk__957",
+        5
+      ],
+      "next_waypoints": [
+        "unk__958",
+        25,
+        3
+      ]
+    }
+  },
+  "artifacts/carla/lidar_encoder.onnx": {
+    "description": "CARLA world_v3, epoch 20: LiDAR BEV (64x64) -> 64-d latent, applied once to the seed frame",
+    "origin": "s3://drift-datasets/checkpoints/world_v3/world_v3_epoch_020_lidar_encoder.onnx",
+    "copied_from": "drift-sim/public/models/lidar_encoder.onnx",
+    "bytes": 115960,
+    "md5": "45a5af832a507b591c6e4301fd602318",
+    "params": 27462,
+    "opset": 17,
+    "producer": "tf2onnx 1.17.0 None",
+    "inputs": {
+      "lidar": [
+        "unk__989",
+        64,
+        64,
+        1
+      ]
+    },
+    "outputs": {
+      "lidar_latent": [
+        "unk__990",
+        64
+      ]
+    }
+  },
+  "artifacts/tinyskies/encoder.onnx": {
+    "description": "TinySkies VAE encoder: RGB 96x96 -> z_mean 6x6x64",
+    "origin": "tinyskies_rgb_vae_v1 epoch 15 (W&B yvxlfm52)",
+    "copied_from": "drift-sim/public/models/tinyskies_latent_runtime_encoder.onnx",
+    "bytes": 2648023,
+    "md5": "d43a1d50ef061236b65cebcaf30e3365",
+    "params": 660480,
+    "opset": 17,
+    "producer": "tf2onnx 1.17.0 None",
+    "inputs": {
+      "rgb": [
+        "unk__50",
+        96,
+        96,
+        3
+      ]
+    },
+    "outputs": {
+      "z_mean": [
+        "unk__51",
+        6,
+        6,
+        64
+      ]
+    }
+  },
+  "artifacts/tinyskies/decoder.onnx": {
+    "description": "TinySkies VAE decoder: z 6x6x64 -> RGB 96x96",
+    "origin": "tinyskies_rgb_vae_v1 epoch 15 (W&B yvxlfm52)",
+    "copied_from": "drift-sim/public/models/tinyskies_latent_runtime_decoder.onnx",
+    "bytes": 5161280,
+    "md5": "8c570ddce034ad046f1c18b29a6f19cb",
+    "params": 1282933,
+    "opset": 17,
+    "producer": "tf2onnx 1.17.0 None",
+    "inputs": {
+      "z": [
+        "unk__680",
+        6,
+        6,
+        64
+      ]
+    },
+    "outputs": {
+      "reconstruction": [
+        "unk__681",
+        96,
+        96,
+        3
+      ]
+    }
+  },
+  "artifacts/tinyskies/latent_sim.onnx": {
+    "description": "TinySkies latent simulator (GRU): 4-step latent + control history, current control -> next latent",
+    "origin": "tinyskies_latent_sim_v1 epoch 40 (W&B dukugksc)",
+    "copied_from": "drift-sim/public/models/tinyskies_latent_sim_v1_epoch_040.onnx",
+    "bytes": 7407747,
+    "md5": "368f9a192e56dea1dbc060116204b4a8",
+    "params": 1842071,
+    "opset": 17,
+    "producer": "tf2onnx 1.17.0 None",
+    "inputs": {
+      "latent_history": [
+        "unk__429",
+        4,
+        6,
+        6,
+        64
+      ],
+      "control_history": [
+        "unk__430",
+        4,
+        3
+      ],
+      "controls": [
+        "unk__431",
+        3
+      ]
+    },
+    "outputs": {
+      "latent_delta": [
+        "unk__432",
+        6,
+        6,
+        64
+      ],
+      "next_latent": [
+        "unk__433",
+        6,
+        6,
+        64
+      ]
+    }
+  },
+  "artifacts/tinyskies/vae.keras": {
+    "description": "Full training VAE (z_mean, z_log_var, Sampling, decoder); weights after 14 completed epochs (file saved as epoch_015); 31/31 tensors identical to encoder.onnx + decoder.onnx",
+    "copied_from": "drift/agents_models/tinyskies/checkpoints/tinyskies_rgb_vae_v1/latent_sim_infer/tinyskies_rgb_vae_v1_epoch_015.keras",
+    "bytes": 7919782,
+    "md5": "bcfa4d0caba0458d68fedb1705604afc"
+  },
+  "artifacts/tinyskies/latent_sim.keras": {
+    "description": "latent_sim epoch 40; 18/18 tensors identical to latent_sim.onnx",
+    "copied_from": "drift/agents_models/tinyskies/checkpoints/tinyskies_latent_sim_v1/infer/tinyskies_latent_sim_v1_epoch_040.keras",
+    "bytes": 7435041,
+    "md5": "6f47a889c0ede7283d1496793ee14bcd"
+  },
+  "artifacts/carla/world_transition.keras": {
+    "description": "Keras 3 checkpoint rebuilt from the released ONNX weights (tools/carla_onnx_to_keras.py); outputs match ONNX within 2.4e-6",
+    "bytes": 6322246,
+    "md5": "b97ecc6a15a006873286897f7f128d50"
+  },
+  "artifacts/carla/lidar_encoder.keras": {
+    "description": "Keras 3 checkpoint rebuilt from the released ONNX weights (tools/carla_onnx_to_keras.py); outputs match ONNX within 2.4e-6",
+    "bytes": 134593,
+    "md5": "ed05677880731388a6bf25592c846b65"
+  }
+}

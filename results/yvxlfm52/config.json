@@ -1,0 +1,28 @@
+{
+  "batch_size": 256,
+  "checkpoint_prefix": "checkpoints/tinyskies_rgb_vae_v1/",
+  "dataset_sample_fraction": 1,
+  "epochs": 200,
+  "google_drive_data_dir": "/content/drive/MyDrive/tinyskies/recordings",
+  "kl_loss_weight": 1e-05,
+  "latent_channels": 64,
+  "latent_dim": 2304,
+  "latent_grid": [
+    6,
+    6
+  ],
+  "learning_rate": 0.0001,
+  "recon_loss_type": "mae",
+  "recon_loss_weight": 1,
+  "s3_processed_prefix": "tinyskies/processed/",
+  "s3_recordings_prefix": "tinyskies/recordings/",
+  "session_tfrecord_dir": "./tinyskies_session_tfrecords",
+  "train_split": 0.9,
+  "use_google_drive_data": false,
+  "use_s3_data": true,
+  "use_s3_processed_data": true,
+  "vision_resize": [
+    96,
+    96
+  ]
+}

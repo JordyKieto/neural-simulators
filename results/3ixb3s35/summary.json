@@ -1,0 +1,18 @@
+{
+  "_runtime": 22074.792003785,
+  "_step": 80900,
+  "_timestamp": 1779577614.0166986,
+  "_wandb.runtime": 22074,
+  "progress/batch_step": 80900,
+  "progress/epoch": 6,
+  "progress/epoch_completed": 5,
+  "progress/frames_seen": 20709385,
+  "time/elapsed_sec": 22005.869683027267,
+  "time/epoch_sec": 4365.466197252274,
+  "train/kl_loss": 268.08795166015625,
+  "train/loss": 0.024195794016122815,
+  "train/recon_loss": 0.02151491492986679,
+  "val/kl_loss": 268.7809729003906,
+  "val/loss": 0.023594753928482533,
+  "val/recon_loss": 0.02090694416314363
+}

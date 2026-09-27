@@ -1,0 +1,32 @@
+# Secrets
+.env
+secrets.yaml
+
+# Data and outputs
+recordings/
+datasets/
+checkpoints/
+wandb/
+*.log
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Private notes / large originals
+notes/private/
+assets/originals/
+paper/arxiv_submission.zip
+node_modules/
+
+# Raw browser capture videos (GIFs in assets/ are derived from them)
+results/eval/captures/**/*.webm

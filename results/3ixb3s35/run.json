@@ -1,0 +1,8 @@
+{
+  "entity_project_run": "drift-ai-models/drift-tinyskies-vae/3ixb3s35",
+  "name": "tinyskies-rgb-vae-v1-001",
+  "state": "finished",
+  "created_at": "2026-05-23T17:00:01Z",
+  "heartbeat_at": "2026-05-23T23:07:57Z",
+  "exported_rows": 1624
+}

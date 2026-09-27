@@ -1,0 +1,28 @@
+{
+  "game_url": "https://tinyskies.vercel.app/",
+  "fps": 15,
+  "width": 1280,
+  "height": 720,
+  "record_seconds": 60,
+  "created_at_unix": 1778831756.3803751,
+  "session_number": 2,
+  "total_sessions": 300,
+  "manual_mode": false,
+  "random_seed": null,
+  "post_go_wait_seconds": 5,
+  "random_keys": [
+    "w",
+    "a",
+    "s",
+    "d"
+  ],
+  "random_min_hold_seconds": 0.15,
+  "random_max_hold_seconds": 1.25,
+  "random_min_gap_seconds": 0.05,
+  "random_max_gap_seconds": 0.45,
+  "random_max_keys_down": 2,
+  "source_frame_count": 831,
+  "retained_frame_count": 9,
+  "retained_frame_fraction": 0.0108,
+  "retained_subset_seed": 950
+}

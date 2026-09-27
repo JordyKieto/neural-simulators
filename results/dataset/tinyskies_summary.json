@@ -1,0 +1,55 @@
+{
+  "source_recordings": "/Users/jordy/Documents/dev/drift-world/recordings",
+  "processed_dataset_version": "tinyskies_session_rollout_v3",
+  "processed_schema": "continuous_session_rgb_controls",
+  "processed_sessions": 75,
+  "processed_frames": 33667,
+  "sessions": 75,
+  "frames": 33667,
+  "hours": 1.247,
+  "raw_resolution": [
+    1280,
+    720
+  ],
+  "model_resolution": [
+    96,
+    96
+  ],
+  "effective_fps": {
+    "median_session": 7.15,
+    "min_session": 3.49,
+    "max_session": 14.8,
+    "overall": 7.48
+  },
+  "nominal_fps": {
+    "15": 62,
+    "20": 13
+  },
+  "mode": {
+    "random": 67,
+    "manual": 8
+  },
+  "source": {
+    "tinyskies.vercel.app": 62,
+    "localhost": 13
+  },
+  "sessions_with_game_state": 13,
+  "keys_down_share": {
+    "none": 0.2794,
+    "w": 0.1098,
+    "d": 0.0897,
+    "a": 0.0893,
+    "s": 0.0833,
+    "wd": 0.0623,
+    "wa": 0.0616,
+    "ad": 0.058,
+    "as": 0.0567,
+    "ws": 0.0542,
+    "sd": 0.053,
+    "was": 0.001,
+    "wad": 0.0009,
+    "wsd": 0.0007,
+    "asd": 0.0001
+  },
+  "controls": "[forward (W), brake (S), turn (D - A)], each in {0,1} / {-1,0,1}"
+}

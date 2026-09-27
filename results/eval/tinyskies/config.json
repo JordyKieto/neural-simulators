@@ -1,0 +1,41 @@
+{
+  "sessions": [
+    "session_0012",
+    "session_0022",
+    "session_0032",
+    "session_0042",
+    "session_0052",
+    "session_0062",
+    "session_0070",
+    "session_0071",
+    "session_0072",
+    "session_0073",
+    "session_0074",
+    "session_0075",
+    "session_0076",
+    "session_0077"
+  ],
+  "human_sessions": [
+    "session_0070",
+    "session_0071",
+    "session_0072",
+    "session_0073",
+    "session_0074",
+    "session_0075",
+    "session_0076",
+    "session_0077"
+  ],
+  "horizon": 64,
+  "stride": 16,
+  "long_steps": 2000,
+  "seeds": "samples/tinyskies/browser_seeds/session_0005 (9 frames)",
+  "scripts": [
+    "none",
+    "forward",
+    "brake",
+    "left",
+    "right",
+    "random_bot"
+  ],
+  "note": "exact training hold-out not reconstructible; sessions possibly seen in training"
+}

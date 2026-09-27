@@ -1,0 +1,1090 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{bm}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{enumitem}
+\usepackage[font=small,labelfont=bf,skip=6pt]{caption}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{cite}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{colorlinks=true,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black}
+
+\setlist{itemsep=2pt,topsep=4pt}
+\newcommand{\evidence}[1]{\par\smallskip\noindent\textit{\small Evidence class: #1}\par\smallskip}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcommand{\hd}[1]{\begin{tabular}[b]{@{}c@{}}#1\end{tabular}}
+
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[L]{\small\scshape Technical Report}
+\fancyhead[R]{\small\scshape Neural Simulator}
+\fancyfoot[C]{\small\thepage}
+\fancypagestyle{firstpage}{\fancyhf{}\renewcommand{\headrulewidth}{0pt}\fancyfoot[C]{\small\thepage}}
+
+\title{\LARGE\bfseries Neural Simulator: Lightweight World Models for Continuous Interactive Environments}
+\author{%
+  \textbf{Jordy Kieto}\\[4pt]
+  \small Code, models, samples and evaluation: \url{https://github.com/JordyKieto/neural-simulators}\\
+  \small Live demo: \href{https://drift-sim-production.up.railway.app/}{\texttt{drift-sim-production.up.railway.app}}\\
+  \small Evaluation notebook: \href{https://github.com/JordyKieto/neural-simulators/blob/main/results/rollout_eval.ipynb}{\texttt{results/rollout\_eval.ipynb}}\\
+  \small Companion report: \href{https://github.com/JordyKieto/carla-imitation-learning}{\textit{Imitation Learning for Autonomous Driving in CARLA}}
+}
+\date{}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{firstpage}
+
+\begin{abstract}
+\noindent A learned world model can predict the next frame well and still fail as a simulator. Simulation requires the model to consume its own predictions, indefinitely, while an agent or a person keeps changing the actions. We ask how little learned machinery is needed before a model starts to behave like an interactive environment.
+
+\smallskip
+\noindent We train two deliberately compact action-conditioned transition models on continuous environments:
+\begin{itemize}
+  \item \textbf{Driving.} A 1.58\,M-parameter one-step model of CARLA driving that predicts the next camera frame together with structured state: vehicle telemetry, route waypoints and a LiDAR embedding. It is trained on 3.3\,h of autopilot driving.
+  \item \textbf{Flight.} A 3.79\,M-parameter VAE-plus-GRU latent model of TinySkies, a browser flight game, trained on 1.25\,h of screen recordings and keystrokes.
+\end{itemize}
+Both run autoregressively under live keyboard control in a web browser, at up to 30 frames per second on a laptop CPU. The source simulator is never executed.
+
+\smallskip
+\noindent Measured on the released models:
+\begin{itemize}
+  \item \textbf{Behaviour outlasts appearance.} Coarse behavioural structure survives while visual detail does not. From the first step, CARLA frames keep only 10--33\% of the real images' high-frequency detail. Predicted speed on a held-out recording nevertheless stays within $\approx$1.3\,m/s of the truth after 5\,s of free rollout.
+  \item \textbf{Dynamics live in a small state module.} The CARLA speed, route and momentum dynamics sit in a small state network that never sees pixels. That network behaves as an integrator with little damping: moderate or real autopilot inputs remain bounded for 100\,s, but sustained heavy throttle drives it far outside the data and into a visual collapse.
+  \item \textbf{Constant inputs lead to fixed points.} Both simulators settle into them. Varied, in-distribution input streams keep them moving.
+  \item \textbf{Steering is harder than going straight.} Steering errors are larger than straight-line errors, and the LiDAR embedding is encoded but not carried forward by the learned dynamics.
+  \item \textbf{One-step error hides this.} For the flight model, error after 128 self-fed steps is 10.6$\times$ its one-step error.
+\end{itemize}
+We release both models, the browser demo, the evaluation code and outputs, data samples and a claim-by-claim evidence audit.
+\end{abstract}
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+
+World models promise learned environments: networks that predict how the world responds to actions well enough to be acted in, by people or by agents~\cite{ha2018worldmodels,alonso2024diamond,hafner2025dreamerv3,hafner2025dreamer4}. Most evidence for that promise takes three forms:
+\begin{itemize}
+  \item latent imagination used to train a policy~\cite{ha2018worldmodels,hafner2025dreamerv3};
+  \item offline prediction scored against held-out video~\cite{oh2015action,chiappa2017recurrent};
+  \item large generative systems that render convincing interactive frames on datacenter hardware~\cite{valevski2025gamengen,decart2024oasis,parkerholder2025genie3,kanervisto2025wham}.
+\end{itemize}
+Each form answers a different question from the one a simulator must answer.
+
+\textbf{The question here is concrete: can a compact learned model be \emph{entered}?} Concretely, a person presses keys, the model predicts the next state, the prediction becomes the model's next input, and the loop continues for as long as the person keeps playing. That loop is unforgiving. A one-step transition model can reach low prediction error and still be useless as a simulator, because once it consumes its own output its errors change its future inputs. Small visual errors accumulate. Small dynamical errors push the state distribution somewhere the training data never went. \textbf{Next-state prediction is the training problem. Sustained neural simulation is the research problem.}
+
+We study this in two continuous environments, chosen because neither has a natural episode end: you can drive around CARLA~\cite{dosovitskiy2017carla} indefinitely, and fly around the TinySkies globe indefinitely.
+
+The two experiments test the same thesis under different observation regimes:
+\begin{itemize}
+  \item \textbf{CARLA} is multimodal. The model predicts camera frames and also simulator-style state: speed, acceleration, velocity, the upcoming route and a LiDAR embedding. In principle such a model could serve an autonomous agent as well as a human.
+  \item \textbf{TinySkies} removes the privileged state. The model sees only pixels and keystrokes.
+\end{itemize}
+
+Both models are small: 1.6\,M and 3.8\,M parameters, 6 and 15\,MB. Both run client-side in a web browser under continuous human control (Fig.~\ref{fig:teaser}). We treat the browser as a scientific instrument, not a deployment target. It turns the world model from a passive predictor into something a person can accelerate, steer, reset, push out of distribution and watch fail, in real time. That makes the learned transition function directly \emph{executable and falsifiable} through interaction.
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/teaser.png}
+  \caption{Frames captured from the deployed browser demo during scripted keyboard play (20\,s each). Every frame is generated by the model from its own previous prediction: 1.58\,M parameters for CARLA (top) and 3.79\,M for TinySkies (bottom). Neither CARLA nor the game is running.}
+  \label{fig:teaser}
+\end{figure}
+
+\paragraph{Contributions.}
+\begin{enumerate}
+  \item We frame sustained, action-conditioned simulation, rather than short-horizon prediction, as the object of study. We evaluate it with protocols that separate one-step from self-fed error, behaviour from appearance, and open-loop from closed-loop input (\S\ref{sec:problem}, \S\S\ref{sec:offline}--\ref{sec:interactive}).
+  \item We test it in two different domains: multimodal driving in CARLA, and visually grounded flight in TinySkies. Both are trained on a few hours of data or less (\S\S\ref{sec:data}--\ref{sec:models}).
+  \item We release both models as directly controllable browser simulations that never execute the source environment, and we measure their size and speed. On one laptop CPU they run at $\approx$200 and $\approx$55 steps per second inside a browser tab (\S\ref{sec:runtime}).
+  \item We characterise where these small models stop behaving like environments:
+  \begin{itemize}
+    \item behaviour outlasting appearance;
+    \item an undamped learned speed integrator;
+    \item fixed-point attractors under constant input;
+    \item weaker steering;
+    \item a LiDAR pathway that is encoded but not propagated.
+  \end{itemize}
+  We treat these failures as results (\S\S\ref{sec:interactive}--\ref{sec:failures}).
+\end{enumerate}
+
+\paragraph{What we do not claim.}
+\begin{itemize}
+  \item Neither model reproduces its source environment. There is no traffic, no multi-agent behaviour, no game mechanics, no arbitrary maps.
+  \item The images are low-fidelity and not photorealistic.
+  \item No policy was trained inside either simulator.
+  \item Being able to keep producing frames is not long-horizon stability; \S\ref{sec:interactive} shows where that stability ends.
+  \item Browser execution of small world models is not new in itself~\cite{ha2018interactive,boerbohan2025world,kumar2025flappy}. The combination we study is discussed in \S\ref{sec:related}.
+\end{itemize}
+
+Every claim in this report is graded by its evidence, following the protocol of the companion report~\cite{kieto2026carla}:
+\begin{itemize}
+  \item \textbf{M}: measured, with a released artifact;
+  \item \textbf{Q}: qualitatively observed (video, figure);
+  \item \textbf{I}: inferred;
+  \item \textbf{A}: author-confirmed first-hand observation;
+  \item \textbf{U}: unverified.
+\end{itemize}
+The full audit is in \texttt{paper/CLAIMS.md}.
+
+% ============================================================
+\section{Related Work and Positioning}
+\label{sec:related}
+% ============================================================
+
+\paragraph{What kind of world model is this?} Li's functional taxonomy~\cite{li2026taxonomy} sorts world models by what they output:
+\begin{itemize}
+  \item a \textbf{renderer} outputs pixels for human eyes and is judged on visual fidelity;
+  \item a \textbf{simulator} outputs state that is ``geometrically, physically or dynamically faithful'' and can be computed on by people and programs;
+  \item a \textbf{planner} outputs actions.
+\end{itemize}
+Under this taxonomy:
+\begin{itemize}
+  \item the TinySkies model is a small action-conditioned \textbf{renderer};
+  \item the CARLA model is a renderer that additionally \textbf{exposes simulator-style state} (telemetry and route), but without the physical guarantees that define Li's simulator category.
+\end{itemize}
+It is a small instance of the renderer--simulator convergence the essay describes. In survey terms it is an action-conditioned, sequentially simulated, general-purpose world model used as an embodied environment~\cite{ding2024survey,li2025embodied}. In the interactive-generative-video decomposition~\cite{yu2025igv} it has Generation (low fidelity), Control (real-time keyboard) and learned Dynamics, minimal Memory, and no Intelligence module.
+
+\paragraph{Latent world models and model-based RL.} Ha and Schmidhuber's World Models~\cite{ha2018worldmodels} combined a VAE, a recurrent dynamics model and a controller trained inside its own ``dream''. Their interactive article ran a $\approx$4.8\,M-parameter CarRacing dream in the browser, and the reader could take over with the arrow keys~\cite{ha2018interactive}. This is the closest ancestor of our work, conceptually and in deployment, and our TinySkies model follows the same VAE-plus-recurrence decomposition. The PlaNet/Dreamer line~\cite{hafner2025dreamerv3,hafner2019planet,hafner2020dreamer}, MuZero~\cite{schrittwieser2020muzero}, IRIS~\cite{micheli2023iris}, TWM~\cite{robine2023twm}, STORM~\cite{zhang2023storm} and DIAMOND~\cite{alonso2024diamond} optimise world models \emph{as tools for policy learning} and judge them by agent return. We instead treat the human-driven rollout itself as the object of study.
+
+\paragraph{Action-conditioned video prediction.} Oh et al.~\cite{oh2015action} and Chiappa et al.~\cite{chiappa2017recurrent} predicted Atari and 3D-maze frames conditioned on actions. Chiappa et al.\ showed that training on the model's own predictions is key to long rollouts. Our CARLA model is structurally a deterministic, Oh/Chiappa-style one-step predictor with an 8-step open-loop loss. Our TinySkies model adds scheduled sampling~\cite{bengio2015scheduled} over a 128-step latent rollout.
+
+\paragraph{Playable neural games.} GameGAN~\cite{kim2020gamegan}, DriveGAN~\cite{kim2021drivegan}, GameNGen~\cite{valevski2025gamengen}, DIAMOND~\cite{alonso2024diamond}, Oasis~\cite{decart2024oasis}, Genie~\cite{bruce2024genie}, Genie 2~\cite{deepmind2024genie2}, Genie 3~\cite{parkerholder2025genie3}, Muse/WHAM~\cite{kanervisto2025wham} and WHAMM~\cite{microsoft2025whamm} generate playable game worlds. They do so at $10^{8}$--$10^{10}$ parameters, on GPUs or servers, and predict pixels only. Among them, DriveGAN~\cite{kim2021drivegan} is the closest human-drivable learned driving simulator, trained partly on CARLA and run on a GPU. Recent browser demos show that $\approx$5\,M-parameter learned world models can run client-side in real time~\cite{boerbohan2025world,kumar2025flappy}. \textbf{Compact browser execution is therefore a property of our models, not a novelty claim.}
+
+\paragraph{Driving world models.}
+\begin{itemize}
+  \item Large video models such as GAIA-1/2~\cite{hu2023gaia1,russell2025gaia2} and Vista~\cite{gao2024vista} target photorealism.
+  \item In CARLA, MILE~\cite{hu2022mile} and Think2Drive~\cite{li2024think2drive} learn latent world models to train or plan driving policies.
+  \item MUVO~\cite{bogdoll2025muvo} is trained on CARLA, is conditioned on acceleration and steering, and decodes RGB, LiDAR and 3D occupancy. It is the closest prior work on multimodal CARLA prediction, and it goes further on LiDAR than we do.
+  \item Our CARLA model instead predicts \textbf{vehicle telemetry and route waypoints} alongside RGB, at 1.6\,M parameters. It carries LiDAR only as an embedding, which \S\ref{sec:lidar} shows is not propagated.
+\end{itemize}
+
+\paragraph{Evaluating world models beyond pixels.} Benchmarks such as WorldScore~\cite{duan2025worldscore} and ACT-Bench~\cite{arai2024actbench} score controllability and action-following as well as image quality, and physics-oriented critiques~\cite{kang2025physical} show that visual plausibility is not dynamical correctness. Compounding error under self-feeding is a long-standing problem~\cite{bengio2015scheduled,talvitie2017self}. Our evaluation follows this move, separating perceptual from behavioural fidelity. It adds one axis that interactive use makes central: \textbf{how the input stream itself, open-loop or closed-loop, constant or varied, shapes what the model does.}
+
+\paragraph{Positioning.} No single system we found combines all five of the following:
+\begin{enumerate}
+  \item a sub-5\,M-parameter learned transition model;
+  \item continuous autoregressive rollout;
+  \item direct real-time human control;
+  \item predicted non-visual state;
+  \item client-side browser execution.
+\end{enumerate}
+Each of these has clear precedents (Table~\ref{tab:positioning}). The search scope is documented in \texttt{paper/LITERATURE.md} (web and arXiv, through 2026-09-27). To our knowledge, ours is also the first learned CARLA transition model released to run in a browser under continuous keyboard control, and the first learned simulator of TinySkies.
+
+\begin{table}[!htbp]
+  \centering
+  \footnotesize
+  \setlength{\tabcolsep}{4pt}
+  \caption{The combination studied here. Rows summarise published descriptions; see \texttt{paper/LITERATURE.md}.}
+  \label{tab:positioning}
+  \begin{tabularx}{\linewidth}{@{}>{\raggedright\arraybackslash}p{3.6cm} l >{\raggedright\arraybackslash}p{1.5cm} Y l Y@{}}
+    \toprule
+    System & Params & Human real-time & Non-visual state & Runtime & Domain \\
+    \midrule
+    World Models, interactive article~\cite{ha2018worldmodels,ha2018interactive} & $\approx$4.8\,M & yes (override) & no & browser & CarRacing, VizDoom \\
+    DriveGAN~\cite{kim2021drivegan} & large & yes & no & GPU & CARLA + real driving \\
+    MUVO~\cite{bogdoll2025muvo} & large & no & LiDAR, occupancy & GPU & CARLA \\
+    GameNGen / DIAMOND~\cite{valevski2025gamengen,alonso2024diamond} & $10^{8}$--$10^{9}$ & yes & no & TPU / GPU & DOOM / Atari, CS:GO \\
+    Oasis, Genie 3, WHAMM~\cite{decart2024oasis,parkerholder2025genie3,microsoft2025whamm} & $10^{8}$--$10^{10}$ & yes & no & server & Minecraft, 3D worlds, Quake II \\
+    Boer Bohan 2025; njkumar 2025~\cite{boerbohan2025world,kumar2025flappy} & $\approx$5\,M & yes & no & browser & forest trail; Flappy Bird \\
+    \textbf{Neural Simulator (CARLA)} & \textbf{1.6\,M} & \textbf{yes} & \textbf{telemetry, route (+ LiDAR embedding)} & \textbf{browser (WASM)} & \textbf{CARLA} \\
+    \textbf{Neural Simulator (TinySkies)} & \textbf{3.8\,M} & \textbf{yes} & no & \textbf{browser (WASM)} & \textbf{TinySkies} \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ============================================================
+\section{Problem Formulation}
+\label{sec:problem}
+% ============================================================
+
+An environment has state $s_t$, actions $a_t$ and transition $s_{t+1}\sim\mathcal{E}(s_t,a_t)$. A learned transition $f_\theta$ is trained on recorded trajectories $\{(s_t,a_t,s_{t+1})\}$ collected from $\mathcal{E}$ under some behaviour policy $\beta$:
+\begin{equation}
+\min_\theta\ \mathbb{E}_{(s,a)\sim d_\beta}\ \sum_{k=1}^{H}\ \ell\big(\hat s_{t+k},\,s_{t+k}\big),\qquad \hat s_{t+1}=f_\theta(\hat s_t,a_t),\ \hat s_t=s_t .
+\label{eq:train}
+\end{equation}
+With $H=1$ this is next-state prediction. With $H>1$ the model is trained on its own predictions for $H$ steps. Deployment, however, is unbounded and closed over a \emph{different} action source $\pi$, here a human:
+\begin{equation}
+\hat s_{t+1}=f_\theta(\hat s_t,a_t),\qquad a_t\sim\pi(\cdot\mid\hat s_{\le t}),\qquad t=0,1,2,\dots
+\label{eq:deploy}
+\end{equation}
+Two distribution shifts compound:
+\begin{itemize}
+  \item the state distribution drifts because $\hat s$ is fed back;
+  \item the action distribution differs because $\pi\neq\beta$. A human presses binary keys; the autopilot applied smooth closed-loop control.
+\end{itemize}
+The second shift is easy to overlook, and \S\ref{sec:interactive} shows it matters as much as the first.
+
+We distinguish two notions of quality:
+\begin{itemize}
+  \item \textbf{Perceptual fidelity:} how closely generated observations resemble the source environment.
+  \item \textbf{Behavioural (dynamical) fidelity:} whether actions cause approximately the right state changes over time.
+\end{itemize}
+
+\textbf{Operationally, a learned model ``behaves like an environment''} over a horizon if, under the action streams it will actually receive:
+\begin{itemize}
+  \item[(i)] it \textbf{responds} to actions in the right direction;
+  \item[(ii)] it \textbf{persists} state such as speed across steps;
+  \item[(iii)] it \textbf{progresses}, i.e.\ the world keeps moving rather than freezing;
+  \item[(iv)] it stays \textbf{coherent}, i.e.\ near the distribution of real observations.
+\end{itemize}
+\S\ref{sec:offline} measures these properties against real recordings. \S\ref{sec:interactive} measures them under scripted, replayed and closed-loop inputs.
+
+% ============================================================
+\section{Environments and Data}
+\label{sec:data}
+% ============================================================
+
+\subsection{CARLA driving}
+\label{sec:carla-data}
+
+\paragraph{Source.} CARLA 0.9.16 in synchronous mode at 20\,Hz, Town01/02, single ego vehicle, no traffic. The data is the same as in the companion imitation-learning report~\cite{kieto2026carla}: \textbf{448 autopilot recordings, 238,674 frames, 3.32\,h} (M).
+
+\paragraph{Collection.} The route generator enumerates spawn points, queries the road graph for feasible maneuvers, and keeps an autopilot rollout only after verifying that the maneuver was executed~\cite{kieto2026carla}. It is released in \texttt{carla\_sim/collection/}.
+
+\paragraph{Observations.}
+\begin{itemize}
+  \item \textbf{RGB:} $224\times224$ at FOV $90^\circ$, resized to $96\times96$.
+  \item \textbf{LiDAR:} 32 channels, 50\,m range, binned into a $64\times64$ bird's-eye-view histogram over 0--30\,m ahead and $\pm$10\,m laterally, normalised by its maximum bin.
+  \item \textbf{Telemetry (5):} tanh-normalised speed (two identical channels), acceleration magnitude, forward velocity and lateral velocity. Speed is recovered as $v = 20\,\mathrm{atanh}(t_0)$\,m/s.
+  \item \textbf{Waypoints:} 25 route points 2\,m apart in the ego frame, each as $(x/d, y/d, d/50)$.
+  \item \textbf{Controls:} throttle, brake, steer.
+\end{itemize}
+
+\paragraph{Distribution} (M):
+\begin{itemize}
+  \item 89.5\% of windows are labelled straight driving;
+  \item only 9.6\% of targets have $|\text{steer}| > 0.1$;
+  \item speeds never exceed 10.0\,m/s.
+\end{itemize}
+
+\paragraph{Privileged inputs.} Telemetry and waypoints come from simulator ground truth and the HD map. During collection the autopilot's route is drawn into the world as green debug markers, so \textbf{the markers appear in every recorded camera frame}~\cite{kieto2026carla}.
+
+\paragraph{Split.} The training code sorts windows by recording path and uses the first 80\% for training. This yields 328 training recordings, 119 validation recordings and one recording split across the boundary (M, reconstructed from the code).
+
+\subsection{TinySkies flight}
+\label{sec:tinyskies-data}
+
+\paragraph{Source.} TinySkies (``GlobeFly'') by Danny Limanseta is a publicly available three.js browser game in which a small plane flies around procedurally generated globes. In the game code, W accelerates, S brakes and A/D turn; the plane never stops. We encode actions as $(\text{forward},\text{brake},\text{turn})\in\{0,1\}\times\{0,1\}\times\{-1,0,1\}$.
+
+\paragraph{Recording.} Playwright drives a Chromium window at $1280\times720$. It takes a JPEG screenshot each step and logs the key state at the screenshot's midpoint (\texttt{tinyskies/record.py}). A bot pressed random combinations of WASD, holding keys for 0.15--1.25\,s with at most two held at once.
+
+\paragraph{Dataset} (M):
+\begin{itemize}
+  \item \textbf{75 sessions $\times$ 60\,s, 33,667 frames, 1.25\,h;}
+  \item 67 bot sessions and 8 human sessions;
+  \item 62 sessions recorded on the public build and 13 on a local build.
+\end{itemize}
+The nominal frame rate was 15 or 20\,fps. Because screenshot capture is the bottleneck, the effective rate is \textbf{7.5\,fps}, with per-session medians of 3.5--14.8\,fps. Frame spacing is therefore irregular, a real property of the data. Frames are resized to $96\times96$. The training split assigns every tenth session to validation, but the order came from a parallel file read, so the exact held-out sessions cannot be reconstructed (see \texttt{PROVENANCE.md} \S5).
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \caption{Datasets (M; \texttt{results/dataset/}). Neither is redistributed; samples of both are in \texttt{samples/}.}
+  \label{tab:datasets}
+  \begin{tabularx}{\linewidth}{@{}l Y Y@{}}
+    \toprule
+    & CARLA & TinySkies \\
+    \midrule
+    Episodes & 448 recordings & 75 sessions \\
+    Frames / duration & 238,674 / 3.32\,h & 33,667 / 1.25\,h \\
+    Rate & 20\,Hz, fixed & $\approx$7.5\,fps, irregular \\
+    Behaviour policy & CARLA autopilot (closed-loop) & random-key bot (67) + human (8) \\
+    Model inputs & RGB, LiDAR BEV, telemetry, waypoints, controls & RGB, controls \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+% ============================================================
+\section{Models}
+\label{sec:models}
+% ============================================================
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{figures/models.png}
+  \caption{The two simulators. Left: the CARLA model is Markov. Its structured-state head reads only the fused state-action vector, so information flows from state to image and never back. Right: the TinySkies model encodes the seed frame once and then rolls forward entirely in the latent space of a frozen VAE.}
+  \label{fig:models}
+\end{figure}
+
+\subsection{CARLA: one-step multimodal transition model}
+\label{sec:carla-model}
+
+The model maps $(I_t, z^{L}_t, \tau_t, w_t, a_t)$ to $(I_{t+1}, z^{L}_{t+1}, \tau_{t+1}, w_{t+1})$:
+\begin{itemize}
+  \item $I$: RGB image;
+  \item $z^{L}$: 64-d LiDAR embedding;
+  \item $\tau$: telemetry;
+  \item $w$: waypoints;
+  \item $a$: action.
+\end{itemize}
+
+Its structure (Fig.~\ref{fig:models}, left):
+\begin{itemize}
+  \item \textbf{Image path.} A four-layer strided CNN encodes the image to $6\times6\times192$.
+  \item \textbf{State path.} Small MLPs embed the LiDAR embedding, telemetry, waypoints and action, and concatenate them into a 224-d state-action vector.
+  \item \textbf{Conditioning.} That vector is projected to a $6\times6\times48$ map and concatenated with the image features. \textbf{This map is the only route by which the action reaches the image.}
+  \item \textbf{Image decoder.} Upsamples to the next $96\times96$ frame, predicted directly rather than as a residual.
+  \item \textbf{State head.} A two-layer MLP reading \textbf{only the state-action vector} predicts the next LiDAR embedding, telemetry and waypoints.
+  \item \textbf{LiDAR encoder.} A three-layer CNN (27\,k parameters) turns the seed frame's BEV into $z^L_0$. After the seed, LiDAR exists only as the predicted embedding; \textbf{there is no LiDAR decoder}.
+\end{itemize}
+The model is deterministic and Markov, with no frame history. Anything that must persist over time has to live in the predicted state.
+
+\paragraph{Training} (from the training code; \texttt{carla\_sim/train.py} reproduces it):
+\begin{itemize}
+  \item 8-step open-loop rollout loss: after the first step the model consumes only its own predictions;
+  \item RGB loss: L1/MSE plus SSIM plus multiscale and edge terms, weight 1;
+  \item MSE on the LiDAR embedding against the (stop-gradient) encoding of the true future scan, weight 0.25;
+  \item MSE on telemetry and on waypoints, weight 0.25 each;
+  \item Adam, learning rate $10^{-4}$, batch 500.
+\end{itemize}
+The configuration also declared scheduled sampling and feedback noise, but the loss never used them.
+
+\paragraph{Released checkpoint} (M): \texttt{world\_v3} epoch 20, with 1,551,827 + 27,456 = 1,579,283 trainable parameters. The ONNX files hold 33 more values, which are shape constants.
+\begin{itemize}
+  \item Its training history was not recoverable. The logging project exists but holds no runs, and only a screenshot of a later training panel survives (Q).
+  \item We therefore evaluate the released model directly (\S\S\ref{sec:offline}--\ref{sec:interactive}) and do not report training curves for it.
+  \item We rebuilt the architecture from the training code, loaded the released weights, and reproduced every output to within $2.4\cdot10^{-6}$ (M, \texttt{tools/carla\_onnx\_to\_keras.py}).
+\end{itemize}
+
+\subsection{TinySkies: VAE and recurrent latent dynamics}
+\label{sec:tinyskies-model}
+
+\paragraph{VAE.} A convolutional VAE (1.96\,M parameters in training) encodes a $96\times96$ frame into a \textbf{$\bm{6\times6\times64}$ spatial latent} (2,304-d, 12$\times$ fewer values than the image). It is trained with L1 reconstruction plus a KL term weighted $10^{-5}$. At runtime only the mean is used.
+
+\paragraph{Dynamics.} A latent dynamics model (1.84\,M parameters) predicts a residual $\Delta z$ with $z_{t+1}=z_t+\Delta z$. Its inputs are the last four latents, the three actions that led into them, and the current action. Its structure: per-step 128-d embeddings, two GRU layers of 256 units, and two 256-unit dense layers (Fig.~\ref{fig:models}, right). The VAE is frozen. The decoder is only a viewer: the simulator never re-encodes its own output.
+
+\paragraph{Training} (M, from the exported logs):
+\begin{itemize}
+  \item latent MSE plus $0.01\lVert\Delta z\rVert^2$ over a self-fed rollout;
+  \item scheduled sampling with $p = 0.1$ and Gaussian feedback noise with $\sigma = 0.005$;
+  \item Adam, learning rate $3\cdot10^{-4}$, gradient clipping at 1.0.
+\end{itemize}
+
+The released model came from a \textbf{two-stage curriculum}:
+\begin{enumerate}
+  \item \textbf{Stage 1}, epochs 1--28: latents from an early VAE checkpoint (epoch 6), rollout horizon 13.
+  \item \textbf{Stage 2}: resumed from epoch 26 with the final VAE and horizon 128, continuing to epoch 42. \textbf{Epoch 40 was released.}
+\end{enumerate}
+The released VAE holds the weights after 14 completed epochs. Both checkpoints were matched tensor-for-tensor to the deployed files (M, \texttt{PROVENANCE.md}).
+
+The training logs already show the paper's central distinction (Fig.~\ref{fig:tinyskies-train}, Table~\ref{tab:tinyskies-train}):
+\begin{itemize}
+  \item at release, validation error at the last rollout step is \textbf{10.6$\times$} the one-step error;
+  \item stage 2 did not reduce either error over 16 further epochs.
+\end{itemize}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{../results/figures/tinyskies_sim_one_vs_final.png}
+  \caption{TinySkies latent simulator training: validation latent MSE of the first prediction against the last prediction of the self-fed rollout. The two panels use different latent spaces and horizons, so they are not directly comparable.}
+  \label{fig:tinyskies-train}
+\end{figure}
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \caption{TinySkies training-log metrics (M; \texttt{results/training\_curves.ipynb}).}
+  \label{tab:tinyskies-train}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    Stage & Horizon & Val one-step & Val last step & Ratio \\
+    \midrule
+    1 (epochs 27--28) & 13 & 0.0065 & 0.0368 & 5.7$\times$ \\
+    2 (epochs 41--42) & 128 & 0.0059 & 0.0632 & 10.8$\times$ \\
+    \textbf{Released (epoch 40)} & 128 & \textbf{0.0059} & \textbf{0.0625} & \textbf{10.6$\times$} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Browser runtime, size and speed}
+\label{sec:runtime}
+
+\paragraph{Runtime.}
+\begin{itemize}
+  \item Both models are exported to ONNX (fp32, opset 17) and run with onnxruntime-web 1.22 on the WASM backend, entirely client-side.
+  \item A 30\,fps loop reads the keyboard, runs one step, draws the frame and feeds all predicted outputs back.
+  \item Driving controls ramp over 0.5\,s, because keyboard input is binary.
+  \item The demo re-seeds after 500 generated frames.
+\end{itemize}
+
+\paragraph{Simulated time runs faster than real time.} At 30\,fps the demo advances CARLA's 20\,Hz dynamics about 1.5$\times$ faster than real time, and TinySkies' $\approx$7.5\,fps dynamics about 4$\times$ faster.
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \caption{Size and closed-loop latency, batch 1, Apple M1 laptop CPU (M; \texttt{results/latency.ipynb}). The browser benchmark runs the same onnxruntime-web version as the demo in headless Chromium.}
+  \label{tab:latency}
+  \begin{tabular}{@{}lcc@{}}
+    \toprule
+    & CARLA & TinySkies \\
+    \midrule
+    Parameters at runtime (trainable) & 1,579,283 & 3,785,443 \\
+    Size (fp32 ONNX) & 6.4\,MB & 15.2\,MB \\
+    Step, browser WASM, 4 threads & \textbf{5.0\,ms} ($\approx$200 steps/s) & \textbf{18.3\,ms} ($\approx$55 steps/s) \\
+    Step, browser WASM, 1 thread & 11.7\,ms & 47.5\,ms \\
+    Step, Python onnxruntime, 1 / 4 threads & 6.1 / 2.6\,ms & 23.7 / 15.6\,ms \\
+    Latent dynamics only (no decoding), 1 / 4 threads & --- & 0.50 / 0.35\,ms \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+On one laptop CPU inside a browser tab, both simulators run faster than their data's native rate (Table~\ref{tab:latency}).
+\begin{itemize}
+  \item \textbf{Where TinySkies spends its time.} Its world model costs half a millisecond per step; decoding the latent into pixels takes the remaining $\approx$98\% of step time.
+  \item \textbf{WebGPU.} It runs the CARLA model but fails on the GRU's \texttt{Split} kernel in onnxruntime-web 1.22, so the demo uses WASM.
+  \item \textbf{The live demo.} Its own performance readout, logged while the frames in Fig.~\ref{fig:teaser} were captured with screen recording running, showed a median of 29\,fps at 8.9\,ms per step for driving and 24\,fps at 37\,ms per step for flying (Q).
+\end{itemize}
+
+% ============================================================
+\section{Offline Evaluation: One-Step Prediction versus Sustained Rollout}
+\label{sec:offline}
+% ============================================================
+
+\paragraph{Protocol.}
+\begin{enumerate}
+  \item Start from a real recorded state.
+  \item Apply the \emph{recorded} actions.
+  \item Let the model consume only its own predictions for $H$ steps.
+  \item Compare every step with the real recording.
+\end{enumerate}
+
+\paragraph{Two references.}
+\begin{itemize}
+  \item \textbf{One-step:} the model is given the true state at every step, i.e.\ the metric a training loss usually reports.
+  \item \textbf{Copy:} hold the seed frame, i.e.\ a model that predicts no change.
+\end{itemize}
+
+\paragraph{Evaluation sets.}
+\begin{itemize}
+  \item \textbf{CARLA:} four locally available recordings with 100-step (5\,s) rollouts started every 10 frames:
+  \begin{itemize}
+    \item one training recording (40 rollouts);
+    \item one held-out validation recording (30 rollouts);
+    \item two recordings made after training with a different driving style (60 rollouts).
+  \end{itemize}
+  \item \textbf{TinySkies:} 14 sessions (every tenth session plus all eight human sessions) with 64-step rollouts ($\approx$8.5\,s at the data rate), seeded with four real frames. These sessions may overlap training data, so we report them as \emph{possibly seen}.
+\end{itemize}
+
+\subsection{CARLA: appearance degrades from the first step; behaviour degrades slowly}
+\label{sec:carla-replay}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../results/figures/carla_replay.png}
+  \caption{CARLA replay. Left: SSIM of rollout, one-step and copy predictions. Middle: absolute error of predicted speed (log scale). Right: waypoint error. Horizontal axes are seconds of free rollout.}
+  \label{fig:carla-replay}
+\end{figure}
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \setlength{\tabcolsep}{4.5pt}
+  \caption{CARLA replay (M; \texttt{results/rollout\_eval.ipynb}). ``Detail kept'' is the ratio of the Laplacian variance of predicted frames to that of real frames.}
+  \label{tab:carla-replay}
+  \begin{tabular}{@{}llcccccc@{}}
+    \toprule
+    Recording & Horizon & \hd{SSIM\\rollout} & \hd{SSIM\\one-step} & \hd{SSIM\\copy} & \hd{True\\speed} & \hd{Speed\\error} & \hd{Detail kept\\(pred/true)} \\
+    \midrule
+    train & 1 step & 0.86 & 0.86 & 0.95 & 3.2\,m/s & 0.14\,m/s & 0.31 \\
+    train & 5\,s & 0.72 & 0.86 & 0.65 & 3.3\,m/s & 0.44\,m/s & 0.33 \\
+    held-out & 1 step & 0.65 & 0.65 & 0.84 & 7.2\,m/s & 0.14\,m/s & 0.12 \\
+    held-out & 5\,s & 0.45 & 0.65 & 0.43 & 5.6\,m/s & 1.33\,m/s & 0.10 \\
+    post-training & 1 step & 0.68 & 0.68 & 0.93 & 1.0\,m/s & 1.36\,m/s & 0.11 \\
+    post-training & 5\,s & 0.47 & 0.67 & 0.72 & 0.8\,m/s & 7.96\,m/s & 0.17 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Detail is never reconstructed, even at step 1.} Predicted frames carry 10--33\% of the real frames' high-frequency detail from the first step, and that ratio stays flat over the horizon (Table~\ref{tab:carla-replay}, last column; M). Fine structure (vegetation, texture, distant geometry) is not reconstructed and then forgotten; the model never reconstructs it. What it renders is coarse layout: road, horizon, hood, blob-like trees and buildings, and, notably, the green route markers from data collection, which it continues to draw and move as the route turns (Q; \texttt{results/figures/carla\_long\_snapshots.png}).
+
+\paragraph{In pixels, the model beats ``no change'' only on the training recording.}
+\begin{itemize}
+  \item On the training recording it overtakes the copy baseline after 0.3\,s (6 steps) and stays above it for the rest of the 5\,s.
+  \item On the held-out recording it is roughly equal to copy throughout.
+  \item On the post-training recordings, which include slow, off-route driving never seen in training, it is worse than copy at every horizon.
+\end{itemize}
+Pixel similarity rewards predicting stillness, and these recordings are mostly slow.
+
+\paragraph{Behaviour degrades far more slowly than appearance where the data supports it.} On the held-out recording, predicted speed after 5\,s is within 1.3\,m/s of the truth, at speeds of 5--7\,m/s (M). The one-step SSIM is flat over the horizon while the rollout SSIM falls: \textbf{the gap between them is the compounding error} that a one-step metric does not see. On the post-training recordings speed error grows to $\approx$8\,m/s. These are out-of-distribution states, and the model also fails behaviourally there.
+
+\paragraph{Turning is harder than going straight} (M; \texttt{carla\_turning\_table.csv}). Compared with steps whose recorded $|\text{steer}| \le 0.1$, steps with recorded $|\text{steer}| > 0.1$ have:
+\begin{itemize}
+  \item 1.3--1.6$\times$ the speed error at 0.5--2\,s;
+  \item 1.8--1.9$\times$ the waypoint error at 0.5--2\,s;
+  \item 5$\times$ the speed error at 5\,s.
+\end{itemize}
+RGB similarity is almost unaffected. The turning deficit is in the dynamics, not in appearance.
+
+\subsection{CARLA: which inputs does the model use?}
+\label{sec:sensitivity}
+
+We replaced one input at a time with the same input from another real frame and measured how much each output changed (M; \texttt{eval/carla\_sensitivity.py}, 512 real states).
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \caption{Mean absolute change of each output when one input is taken from a different real frame.}
+  \label{tab:sensitivity}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    Shuffled input & $\Delta$ next RGB & $\Delta$ next telemetry & $\Delta$ next waypoints & $\Delta$ next LiDAR emb. \\
+    \midrule
+    RGB & 0.105 & \textbf{0.000} & \textbf{0.000} & \textbf{0.000} \\
+    telemetry & 0.003 & \textbf{0.116} & 0.016 & 0.014 \\
+    waypoints & 0.011 & 0.081 & \textbf{0.294} & 0.050 \\
+    controls & 0.007 & 0.057 & 0.045 & 0.041 \\
+    LiDAR embedding & 0.00002 & 0.0003 & 0.0003 & 0.0004 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+Two structural facts follow. Neither is visible in pixel metrics.
+
+\paragraph{1. Information flows from state to image, never back.} Shuffling the image leaves every structured output exactly unchanged, because the state head never sees pixels. The CARLA simulator is therefore two models in one:
+\begin{itemize}
+  \item a $\approx$0.1\,M-parameter state-and-action dynamics network, which carries speed, route and momentum;
+  \item an image generator conditioned on that state.
+\end{itemize}
+This is the mechanism behind the central qualitative observation: \textbf{momentum and progression survive while pixels blur}, because they are computed in a pathway that pixel errors cannot corrupt.
+
+\paragraph{2. Actions move the state more than the image.} Controls change telemetry and waypoints 6--8$\times$ more than they change the image. A full-lock steer changes the next frame by 0.03 and the next waypoints by 0.15 (\texttt{sensitivity.json}, M). The image responds to actions mostly \emph{through} the state it renders.
+
+\subsection{TinySkies: latent dynamics beat stillness; the VAE bounds appearance}
+\label{sec:tinyskies-replay}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.85\linewidth]{../results/figures/tinyskies_replay.png}
+  \caption{TinySkies replay. Left: latent error of the model and of holding the seed latent. Right: SSIM of decoded predictions against the real frame (dotted) and against the VAE reconstruction of the real frame (solid; dynamics only). The dashed line is the VAE's own reconstruction quality.}
+  \label{fig:tinyskies-replay}
+\end{figure}
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \caption{TinySkies replay over 14 sessions possibly seen in training (M).}
+  \label{tab:tinyskies-replay}
+  \begin{tabular}{@{}lcccc@{}}
+    \toprule
+    & Latent MSE & \hd{Latent MSE\\(copy)} & SSIM vs real & \hd{SSIM vs VAE recon\\(dynamics only)} \\
+    \midrule
+    VAE ceiling (no dynamics) & --- & --- & 0.789 & --- \\
+    step 1 & 0.016 & 0.020 & 0.757 & 0.947 \\
+    step 8 & 0.049 & 0.072 & 0.677 & 0.822 \\
+    step 32 & 0.060 & 0.097 & 0.628 & 0.751 \\
+    step 64 ($\approx$8.5\,s) & 0.067 & 0.104 & 0.593 & 0.710 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{The model's latent error stays below the copy baseline at every horizon} (Table~\ref{tab:tinyskies-replay}). That is: it predicts how the view changes under the recorded keys better than predicting no change, for the full 64 steps.
+
+\paragraph{Appearance is bounded by the VAE, not by the dynamics.} The VAE alone reaches SSIM 0.79 and keeps 35\% of the real frames' fine detail. Measured against VAE reconstructions, which removes reconstruction error, the dynamics lose SSIM gradually, from 0.95 after one step to 0.71 after 64.
+
+\paragraph{Turning is not harder here, unlike in CARLA.} Turning steps have slightly \emph{lower} latent error than straight ones. Sessions flown by a human are modestly harder than bot sessions: latent MSE at step 64 is 0.070 against 0.063.
+
+\subsection{CARLA: LiDAR is encoded but not propagated}
+\label{sec:lidar}
+
+The training LiDAR loss stayed close to zero, which could suggest that the LiDAR embedding was learned well. We tested this directly (M; \texttt{eval/carla\_lidar\_probe.py}, 1,700 real scans).
+\begin{itemize}
+  \item \textbf{Encoded.} The seed embedding does contain scan information. On standardized embeddings, ridge probes predict a scan's occupied-cell count with held-out $R^2 = 0.80$ and its left/right asymmetry with $R^2 = 0.77$. The same probes on the pooled raw scan reach 0.89 and 0.96.
+  \item \textbf{Squeezed.} Two real scans differ by 129\% of a scan's mean magnitude, but their embeddings differ by only 0.17\%. A predictor that always outputs the mean embedding would score an MSE of $\bm{8\cdot10^{-6}}$ against the training target. A near-zero LiDAR loss is therefore reachable without any learning, and at weight 0.25 it contributes almost no training signal.
+  \item \textbf{Not propagated.} One step ahead, the model's predicted embedding misses the true future embedding by $\approx$2,300 standard deviations of the embedding's natural variation. Its per-dimension correlation with the truth is 0.03 at step 1 and $\approx$0 afterwards. Consistent with Table~\ref{tab:sensitivity}, the other outputs are insensitive to it.
+\end{itemize}
+The released CARLA model is therefore multimodal in its \emph{inputs} at the seed and in its \emph{structured outputs} (telemetry and route), but not in LiDAR dynamics. \textbf{We describe it as predicting RGB plus structured state (telemetry and route), with a LiDAR embedding carried through the loop.} We do not say that it predicts LiDAR. This is a concrete example of a low auxiliary loss that says nothing about whether a modality was learned.
+
+% ============================================================
+\section{Interactive Behaviour: What the Learned Environments Capture}
+\label{sec:interactive}
+% ============================================================
+
+\S\ref{sec:offline} fixed the actions to the recorded ones. In interactive use the actions come from somewhere else. This section drives the released models with scripted inputs (constant levels, oscillation), open-loop replays of real autopilot control streams, and a simple closed-loop controller, over 2,000 steps. For CARLA that is 100\,s of simulated time from each of the six browser seeds. For TinySkies it is 2,000 steps from each of the nine browser seed frames.
+
+\subsection{CARLA: control response and momentum}
+\label{sec:carla-response}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=\linewidth]{../results/figures/carla_action_response.png}
+  \caption{CARLA action response from the six browser seeds (mean). Left: constant throttle. Middle: full throttle for 3\,s, then coast or brake. Right: lateral offset of the predicted route under constant steering. Speed is clipped at 60\,m/s for display.}
+  \label{fig:carla-response}
+\end{figure}
+
+\paragraph{Response (i).} Every control moves the state in the right direction (M).
+\begin{itemize}
+  \item Throttle raises predicted speed and brake lowers it.
+  \item Steering left moves the predicted route and lateral velocity to the left, and steering right moves them to the right. For waypoint 10, the lateral offset is $-0.76$ for steer $-1$ and $+0.59$ for steer $+1$.
+\end{itemize}
+
+\paragraph{Persistence (ii).} Speed persists across steps instead of resetting each frame (M).
+\begin{itemize}
+  \item Constant low throttle settles at a stable speed: $\approx$1\,m/s with none, $\approx$3.1\,m/s at 0.25.
+  \item After 3\,s of full throttle, releasing the pedal leaves speed high while braking lowers it.
+\end{itemize}
+This is the learned momentum that the author observed while driving, with acceleration changing how fast the world streams past (A). Our pixel metric supports that observation only weakly. Over the first 3\,s, the mean change between consecutive frames is 0.0017 at idle and 0.0019 at throttle 0.5, and only doubles (0.0034) at full throttle, where predicted speed is already out of distribution (M). Mean absolute pixel change on blurred frames may understate apparent motion. A flow-based measure is future work.
+
+\paragraph{The integrator has too little damping.} Sustained throttle of 0.75 or more drives predicted speed beyond the 10\,m/s maximum present in the data and on to the saturation point of the telemetry encoding in all six seeds. At 0.5 this happens in two of six seeds (M). Median time to saturation is 2.75\,s at full throttle. The same happens under constant left steer (2.55\,s), but not under right steer, an asymmetry with no counterpart in the data. Braking from saturation brings speed down only to $\approx$22\,m/s. The learned speed dynamics integrate throttle but never learned the drag and speed limit that the autopilot's closed-loop control made unnecessary to observe: in the data, the autopilot eased off before speed ever got high.
+
+\subsection{Long rollouts: the input stream decides}
+\label{sec:long}
+
+\begin{table}[!htbp]
+  \centering
+  \small
+  \caption{CARLA long rollouts (M; \texttt{carla\_long\_table.csv}). ``Frozen'' means the mean absolute change between consecutive frames is below $10^{-3}$.}
+  \label{tab:carla-long}
+  \begin{tabularx}{\linewidth}{@{}Y ccc@{}}
+    \toprule
+    Input stream (100\,s) & \hd{Speed at 100\,s\\(median seed)} & \hd{Seeds saturating\\speed} & \hd{Seeds frozen,\\last 10\,s} \\
+    \midrule
+    Replayed autopilot controls (slow-first stream) & 2.3\,m/s & 0/6 & \textbf{0/6} \\
+    Replayed autopilot controls (fast-first stream) & saturated & 4/6 & 0/6 \\
+    Weave (steer $\pm$0.5, sinusoid, throttle 0.5) & 7.4\,m/s & 0/6 & \textbf{0/6} \\
+    Constant throttle 0.5 & 5.0\,m/s & 2/6 & 4/6 \\
+    Constant full throttle & saturated & 6/6 & 0/6 (noise attractor) \\
+    Constant idle & 1.0\,m/s & 0/6 & 5/6 \\
+    Constant left 0.5 / right 0.5 & saturated / 3.1\,m/s & 6/6 / 0/6 & 6/6 / 0/6 \\
+    Closed-loop controller, target 3 / 5 / 7\,m/s & 3.0 / 3.4 / 4.6\,m/s & 0/6 & 5/6 / 6/6 / 6/6 \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{../results/figures/carla_long_snapshots.png}
+  \caption{CARLA long rollouts from one held-out seed, snapshots at 5, 10, 20, 50 and 100\,s. From the top: replayed autopilot controls (slow-first and fast-first streams), weave, closed-loop controller at 3\,m/s, constant full throttle.}
+  \label{fig:carla-long}
+\end{figure}
+
+Three regimes appear (Table~\ref{tab:carla-long}, Fig.~\ref{fig:carla-long}; M).
+
+\paragraph{1. Varied, in-distribution inputs sustain simulation for the full 100\,s.} Replaying real autopilot control sequences open-loop keeps all six seeds bounded (median 2.3\,m/s) and moving (0/6 frozen), with road, route markers and turns still being rendered after 100\,s. An oscillating steering input does the same. This is the regime a careful human driver is in (A).
+
+\paragraph{2. Constant inputs converge to fixed points.} Constant idle, cruise or left steer each settle into a static frame (frame change $\rightarrow$ 0), even when the predicted state says the car is moving. At that point the image has decoupled from the state.
+
+\paragraph{3. Out-of-distribution inputs collapse.} Sustained full throttle, or a control stream from the faster held-out recording, saturates speed within $\approx$3--5\,s. Four to six of six seeds then fall into the same noise-textured image, a shared attractor that is unrelated to the seed. The live demo reaches it too when the throttle key is held (Q; \texttt{assets/driving\_runaway.gif}).
+
+\paragraph{Closing the loop on the model's own state.} A 10-line controller reads only the \emph{predicted} speed and waypoints: proportional throttle toward a target speed, plus steering toward waypoint 5.
+\begin{itemize}
+  \item It keeps speed bounded for 100\,s in every seed. Driving to 3, 5 and 7\,m/s targets ends at 3.0, 3.4 and 4.6\,m/s, with 0/6 saturations.
+  \item It never enters the noise attractor.
+\end{itemize}
+Two conclusions follow.
+\begin{itemize}
+  \item \textbf{The predicted structured state is usable for control.} An agent reading only the simulator's outputs can regulate it (M). This supports, in a minimal form, the idea that the CARLA model could serve as an agent environment. We do not claim that a learned policy would transfer.
+  \item \textbf{Feedback is not enough on its own.} The controller settles to near-constant actions, and the image then freezes: 5--6 of 6 seeds by 100\,s. It also under-shoots higher targets, because it steers persistently toward rendered turn markers.
+\end{itemize}
+Interactive use succeeds in the regime between these failures: a person who varies their inputs and eases off when the world rushes by.
+
+\subsection{TinySkies: terrain evolves, forward flight stalls}
+\label{sec:tinyskies-long}
+
+\begin{figure}[!htbp]
+  \centering
+  \includegraphics[width=0.75\linewidth]{../results/figures/tinyskies_long_snapshots.png}
+  \caption{TinySkies long rollouts from one browser seed, snapshots at steps 100, 200, 500, 1,000 and 2,000. From the top: random-key bot, constant forward, constant left, no input.}
+  \label{fig:tinyskies-long}
+\end{figure}
+
+\paragraph{What survives.} Over the first 100--200 steps ($\approx$3--7\,s at 30\,fps in the browser), the learned world does what the author observed in play (A; Fig.~\ref{fig:teaser}, Fig.~\ref{fig:tinyskies-long}):
+\begin{itemize}
+  \item terrain evolves as the plane moves;
+  \item biomes shift from green to yellow, ocean regions come and go, and the horizon arc persists;
+  \item the plane sprite stays visible.
+\end{itemize}
+This is the core motion competence and environmental progression that the VAE latent can express. The game's interface elements, balloons, collectibles and tricks are not reproduced (A).
+
+\paragraph{Fixed points and dissolution.} With a constant forward, brake or no-input stream, all nine seeds converge to a static frame by 2,000 steps. The plane appears to stop, which the real game never does (M). Constant turning keeps the world moving indefinitely (0--1 of 9 frozen): the view keeps rotating. Beyond $\approx$500 steps, the globe's structure dissolves into saturated colour fields under every input (Q). As in CARLA, the input stream determines whether the simulator keeps progressing.
+
+% ============================================================
+\section{Failure Analysis}
+\label{sec:failures}
+% ============================================================
+
+These failures define the result. We report them per environment, without forcing symmetry between the two.
+
+\paragraph{CARLA.}
+\begin{itemize}
+  \item \textbf{Steering and geometry.} Steering errors in the dynamics are 1.3--5$\times$ larger than straight-line errors (\S\ref{sec:carla-replay}). Steering left, but not right, drives speed to saturation (\S\ref{sec:carla-response}). The data is 89.5\% straight driving. The author observed that turning and large steering interventions expose weak geometry, while forward driving is the model's strongest regime (A).
+  \item \textbf{Appearance.}
+  \begin{itemize}
+    \item Fine detail is never reconstructed; vegetation and texture are imagined, not recalled (Q, M).
+    \item Geometry drifts over long rollouts (Q).
+    \item The model renders the route markers that collection drew into the camera frames. Its image is partly a rendering of its own predicted route.
+  \end{itemize}
+  \item \textbf{Undamped speed.} Speed is integrated with too little damping (\S\ref{sec:carla-response}). Keyboard throttle is binary, so the demo ramps it, and holding the key still leads to runaway and collapse.
+  \item \textbf{Fixed points under constant input} (\S\ref{sec:long}).
+  \item \textbf{LiDAR} is encoded but not propagated (\S\ref{sec:lidar}).
+  \item \textbf{Scope.} There are no other agents, traffic rules, collisions or map changes. The model is bounded by the distribution of 448 autopilot recordings on two towns. Its inputs include privileged simulator state.
+\end{itemize}
+
+\paragraph{TinySkies.}
+\begin{itemize}
+  \item \textbf{Fidelity} is bounded by a 12$\times$-compressing VAE (SSIM 0.79, 35\% of fine detail).
+  \item \textbf{Forward flight} decays to a static frame under constant input (\S\ref{sec:tinyskies-long}).
+  \item \textbf{Structure} of the globe dissolves after $\approx$500 steps.
+  \item \textbf{Game features} such as UI, collectibles and tricks are absent.
+  \item \textbf{Timing.} The training data's irregular $\approx$7.5\,fps timing means one model step is not a fixed amount of game time.
+\end{itemize}
+
+\paragraph{Both.}
+\begin{itemize}
+  \item \textbf{What compact models learn first.} Coarse motion, progression and momentum come first. Precise geometry, fine appearance and saturation behaviour come last. Behaviour survives longer than appearance (CARLA) or than latent structure (TinySkies).
+  \item \textbf{Action-stream sensitivity.} The deployment action distribution matters as much as the state drift that one-step metrics ignore. Constant inputs expose fixed points. Out-of-distribution inputs expose missing physics.
+\end{itemize}
+
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+% ============================================================
+
+\paragraph{Perceptual versus behavioural fidelity.} The CARLA model keeps a third or less of the real images' detail, yet it tracks speed on held-out driving, moves its route in the commanded direction, and sustains 100\,s of coherent driving under realistic input streams. Its architecture makes the separation explicit: the dynamics that carry behaviour never see pixels. \textbf{How much visual fidelity a learned environment needs depends on what it is for.} For a human who wants to feel momentum and progression, very little. For an agent that must act on images, far more. The CARLA model exposes structured state an agent could use, and \S\ref{sec:long} shows that even a hand-written controller can read and regulate that state. We do not claim that this is sufficient for policy learning. RGB fidelity and the speed runaway are the practical reasons we did not attempt training a policy inside the simulator in this iteration.
+
+\paragraph{The browser as an instrument.} Interaction exposed every failure in \S\ref{sec:failures} before any metric did. Holding a key triggers the speed runaway. Steering reveals the weak geometry. Watching long enough reveals fixed points. Offline replay with recorded actions shows none of these, because the recorded actions come from the same closed-loop controller that produced the data. \textbf{The action stream is part of the test.} A simulator should be evaluated under the inputs it will actually receive, and a browser is the cheapest way to hand those inputs to a person. The same models also run at $\approx$50--200 steps per second on a laptop CPU, so the instrument costs nothing to run.
+
+\paragraph{Why small models behave this way.} With a Markov state and a deterministic transition, a constant input makes the rollout the iteration of a fixed map, and iterated maps tend to converge to fixed points or small cycles. Varied inputs keep perturbing the map. The speed runaway is the same property seen through the data: the autopilot never held the throttle down, so nothing in training constrained what happens when someone does.
+
+% ============================================================
+\section{Limitations and Threats to Validity}
+\label{sec:limitations}
+% ============================================================
+
+\begin{itemize}
+  \item \textbf{Small evaluation sets.}
+  \begin{itemize}
+    \item CARLA replay uses four locally available recordings: one training, one held-out, two post-training.
+    \item The TinySkies sessions may overlap the training set (\S\ref{sec:offline}).
+    \item Long-rollout results come from six CARLA and nine TinySkies seeds.
+  \end{itemize}
+  \item \textbf{Missing training history.} The CARLA model's training history was not recoverable. Every CARLA number comes from evaluating the released model.
+  \item \textbf{Qualitative observations.} Observations from human interaction are author-reported (A) or qualitative (Q), not systematic user studies.
+  \item \textbf{Metric choices.} ``Frozen'' and ``saturated'' are threshold definitions; see the notebook for continuous values. SSIM rewards stillness, so we pair it with behavioural metrics throughout.
+  \item \textbf{Privileged inputs.} CARLA inputs include privileged telemetry and HD-map route waypoints, and the camera frames contain drawn route markers.
+  \item \textbf{Time mismatch.} Simulated time in the demo runs faster than real time (\S\ref{sec:runtime}).
+  \item \textbf{Measurement platform.} Latency was measured on one machine (Apple M1).
+\end{itemize}
+
+% ============================================================
+\section{Future Work}
+\label{sec:future}
+% ============================================================
+
+\begin{itemize}
+  \item \textbf{Multimodal training.} Make LiDAR a first-class predicted modality, with a decoder and a loss that cannot be satisfied by a constant, and measure whether it propagates. RGB was the first evidence of viability; structured prediction is the goal.
+  \item \textbf{Better dynamics.}
+  \begin{itemize}
+    \item Add frame history or recurrence to the CARLA model.
+    \item Add damping and speed saturation through data (non-autopilot, high-speed and recovery driving) or through structure.
+    \item Use turn-balanced data.
+  \end{itemize}
+  \item \textbf{Agents in the loop.}
+  \begin{itemize}
+    \item Train a policy inside the CARLA simulator on its structured outputs and measure transfer back to CARLA.
+    \item The companion report's driving policy is a natural first agent.
+  \end{itemize}
+  \item \textbf{Behavioural benchmarks.}
+  \begin{itemize}
+    \item Standardise the input-stream conditions of \S\ref{sec:interactive} (replayed, constant, closed-loop, human) as an evaluation protocol for interactive world models.
+    \item Run a controlled user study in the browser.
+  \end{itemize}
+\end{itemize}
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ============================================================
+
+A world model becomes more interesting when its predictions can be acted on, when those actions change the next predictions, and when the loop stays coherent long enough to count as an environment. Two compact models, 1.6\,M and 3.8\,M parameters, cross into that regime:
+\begin{itemize}
+  \item a person can drive through learned CARLA dynamics and fly over a learned TinySkies globe in a web browser;
+  \item speed, momentum, route and terrain progression respond to their inputs.
+\end{itemize}
+They also show where the regime ends: fine appearance first, then geometry, then the physics the training data never needed to show, with constant inputs driving both into fixed points. The learned environments are not replicas of their sources. They are compact approximations of particular slices of dynamics, and they can be entered, controlled, observed, broken and studied. The longer-term aim is not better neural video but learned environments structured, efficient and dynamically faithful enough to be places where people and agents act.
+
+% ============================================================
+\bibliographystyle{unsrt}
+\begin{thebibliography}{10}
+\small
+
+\bibitem{ha2018worldmodels}
+D.~Ha and J.~Schmidhuber.
+\newblock World models.
+\newblock \emph{arXiv preprint arXiv:1803.10122}, 2018 (NeurIPS 2018 version: ``Recurrent World Models Facilitate Policy Evolution'', arXiv:1809.01999).
+
+\bibitem{alonso2024diamond}
+E.~Alonso, A.~Jelley, V.~Micheli, A.~Kanervisto, A.~Storkey, T.~Pearce, and F.~Fleuret.
+\newblock Diffusion for world modeling: Visual details matter in Atari (DIAMOND).
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2024. arXiv:2405.12399.
+
+\bibitem{hafner2025dreamerv3}
+D.~Hafner, J.~Pasukonis, J.~Ba, and T.~Lillicrap.
+\newblock Mastering diverse control tasks through world models (DreamerV3).
+\newblock \emph{Nature}, 640, 2025. arXiv:2301.04104.
+
+\bibitem{hafner2025dreamer4}
+D.~Hafner, W.~Yan, and T.~Lillicrap.
+\newblock Training agents inside of scalable world models (Dreamer 4).
+\newblock \emph{arXiv preprint arXiv:2509.24527}, 2025.
+
+\bibitem{oh2015action}
+J.~Oh, X.~Guo, H.~Lee, R.~Lewis, and S.~Singh.
+\newblock Action-conditional video prediction using deep networks in Atari games.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2015. arXiv:1507.08750.
+
+\bibitem{chiappa2017recurrent}
+S.~Chiappa, S.~Racani\`ere, D.~Wierstra, and S.~Mohamed.
+\newblock Recurrent environment simulators.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2017. arXiv:1704.02254.
+
+\bibitem{valevski2025gamengen}
+D.~Valevski, Y.~Leviathan, M.~Arar, and S.~Fruchter.
+\newblock Diffusion models are real-time game engines (GameNGen).
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2025. arXiv:2408.14837.
+
+\bibitem{decart2024oasis}
+Decart and Etched.
+\newblock Oasis: A universe in a transformer.
+\newblock \url{https://oasis-model.github.io}, 2024.
+
+\bibitem{parkerholder2025genie3}
+J.~Parker-Holder, S.~Fruchter, et~al.
+\newblock Genie 3: A new frontier for world models.
+\newblock Google DeepMind blog, 2025.
+
+\bibitem{kanervisto2025wham}
+A.~Kanervisto et~al.
+\newblock World and human action models towards gameplay ideation (Muse/WHAM).
+\newblock \emph{Nature}, 638, 2025.
+
+\bibitem{dosovitskiy2017carla}
+A.~Dosovitskiy, G.~Ros, F.~Codevilla, A.~L\'opez, and V.~Koltun.
+\newblock CARLA: An open urban driving simulator.
+\newblock In \emph{Conference on Robot Learning (CoRL)}, 2017.
+
+\bibitem{ha2018interactive}
+D.~Ha and J.~Schmidhuber.
+\newblock World models (interactive article).
+\newblock \url{https://worldmodels.github.io}, 2018.
+
+\bibitem{boerbohan2025world}
+O.~Boer Bohan.
+\newblock World emulation via neural network.
+\newblock \url{https://madebyoll.in/posts/world_emulation_via_dnn/}, 2025.
+
+\bibitem{kumar2025flappy}
+N.~Kumar.
+\newblock Optimizing a Flappy Bird world model to run in a web browser.
+\newblock \url{https://www.njkumar.com/optimizing-flappy-bird-world-model-to-run-in-a-web-browser/}, 2025.
+
+\bibitem{kieto2026carla}
+J.~Kieto.
+\newblock Imitation learning for autonomous driving in CARLA.
+\newblock Technical report, 2026. \url{https://github.com/JordyKieto/carla-imitation-learning}.
+
+\bibitem{li2026taxonomy}
+F.-F.~Li.
+\newblock A functional taxonomy of world models.
+\newblock \url{https://drfeifei.substack.com/p/a-functional-taxonomy-of-world-models}, 3 June 2026.
+
+\bibitem{ding2024survey}
+J.~Ding et~al.
+\newblock Understanding world or predicting future? A comprehensive survey of world models.
+\newblock \emph{arXiv preprint arXiv:2411.14499}, 2024.
+
+\bibitem{li2025embodied}
+X.~Li et~al.
+\newblock A comprehensive survey on world models for embodied AI.
+\newblock \emph{arXiv preprint arXiv:2510.16732}, 2025.
+
+\bibitem{yu2025igv}
+J.~Yu et~al.
+\newblock A survey of interactive generative video.
+\newblock \emph{arXiv preprint arXiv:2504.21853}, 2025.
+
+\bibitem{hafner2019planet}
+D.~Hafner et~al.
+\newblock Learning latent dynamics for planning from pixels (PlaNet).
+\newblock In \emph{International Conference on Machine Learning (ICML)}, 2019. arXiv:1811.04551.
+
+\bibitem{hafner2020dreamer}
+D.~Hafner, T.~Lillicrap, J.~Ba, and M.~Norouzi.
+\newblock Dream to control: Learning behaviors by latent imagination.
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2020. arXiv:1912.01603.
+
+\bibitem{schrittwieser2020muzero}
+J.~Schrittwieser et~al.
+\newblock Mastering Atari, Go, chess and shogi by planning with a learned model (MuZero).
+\newblock \emph{Nature}, 588, 2020. arXiv:1911.08265.
+
+\bibitem{micheli2023iris}
+V.~Micheli, E.~Alonso, and F.~Fleuret.
+\newblock Transformers are sample-efficient world models (IRIS).
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2023. arXiv:2209.00588.
+
+\bibitem{bengio2015scheduled}
+S.~Bengio, O.~Vinyals, N.~Jaitly, and N.~Shazeer.
+\newblock Scheduled sampling for sequence prediction with recurrent neural networks.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2015. arXiv:1506.03099.
+
+\bibitem{kim2020gamegan}
+S.~W. Kim, Y.~Zhou, J.~Philion, A.~Torralba, and S.~Fidler.
+\newblock Learning to simulate dynamic environments with GameGAN.
+\newblock In \emph{IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 2020. arXiv:2005.12126.
+
+\bibitem{kim2021drivegan}
+S.~W. Kim, J.~Philion, A.~Torralba, and S.~Fidler.
+\newblock DriveGAN: Towards a controllable high-quality neural simulation.
+\newblock In \emph{IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)}, 2021. arXiv:2104.15060.
+
+\bibitem{bruce2024genie}
+J.~Bruce et~al.
+\newblock Genie: Generative interactive environments.
+\newblock In \emph{International Conference on Machine Learning (ICML)}, 2024. arXiv:2402.15391.
+
+\bibitem{hu2023gaia1}
+A.~Hu et~al.
+\newblock GAIA-1: A generative world model for autonomous driving.
+\newblock \emph{arXiv preprint arXiv:2309.17080}, 2023.
+
+\bibitem{russell2025gaia2}
+L.~Russell et~al.
+\newblock GAIA-2: A controllable multi-view generative world model for autonomous driving.
+\newblock \emph{arXiv preprint arXiv:2503.20523}, 2025.
+
+\bibitem{gao2024vista}
+S.~Gao et~al.
+\newblock Vista: A generalizable driving world model with high fidelity and versatile controllability.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2024. arXiv:2405.17398.
+
+\bibitem{hu2022mile}
+A.~Hu et~al.
+\newblock Model-based imitation learning for urban driving (MILE).
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2022. arXiv:2210.07729.
+
+\bibitem{li2024think2drive}
+Q.~Li, X.~Jia, S.~Wang, and J.~Yan.
+\newblock Think2Drive: Efficient reinforcement learning by thinking in latent world model for quasi-realistic autonomous driving (in CARLA-v2).
+\newblock In \emph{European Conference on Computer Vision (ECCV)}, 2024. arXiv:2402.16720.
+
+\bibitem{bogdoll2025muvo}
+D.~Bogdoll, Y.~Yang, T.~Joseph, and M.~Z\"ollner.
+\newblock MUVO: A multimodal world model with spatial representations for autonomous driving.
+\newblock In \emph{IEEE Intelligent Vehicles Symposium (IV)}, 2025. arXiv:2311.11762.
+
+\bibitem{duan2025worldscore}
+H.~Duan, H.-X. Yu, S.~Chen, L.~Fei-Fei, and J.~Wu.
+\newblock WorldScore: A unified evaluation benchmark for world generation.
+\newblock In \emph{IEEE/CVF International Conference on Computer Vision (ICCV)}, 2025. arXiv:2504.00983.
+
+\bibitem{arai2024actbench}
+H.~Arai et~al.
+\newblock ACT-Bench: Towards action controllable world models for autonomous driving.
+\newblock \emph{arXiv preprint arXiv:2412.05337}, 2024.
+
+\bibitem{kang2025physical}
+B.~Kang et~al.
+\newblock How far is video generation from world model: A physical law perspective.
+\newblock In \emph{International Conference on Machine Learning (ICML)}, 2025. arXiv:2411.02385.
+
+\bibitem{talvitie2017self}
+E.~Talvitie.
+\newblock Self-correcting models for model-based reinforcement learning.
+\newblock In \emph{AAAI Conference on Artificial Intelligence (AAAI)}, 2017. arXiv:1612.06018.
+
+\bibitem{robine2023twm}
+J.~Robine, M.~H\"oftmann, T.~Uelwer, and S.~Harmeling.
+\newblock Transformer-based world models are happy with 100k interactions (TWM).
+\newblock In \emph{International Conference on Learning Representations (ICLR)}, 2023. arXiv:2303.07109.
+
+\bibitem{zhang2023storm}
+W.~Zhang, G.~Wang, J.~Sun, Y.~Yuan, and G.~Huang.
+\newblock STORM: Efficient stochastic transformer based world models for reinforcement learning.
+\newblock In \emph{Advances in Neural Information Processing Systems (NeurIPS)}, 2023. arXiv:2310.09615.
+
+\bibitem{deepmind2024genie2}
+Google DeepMind.
+\newblock Genie 2: A large-scale foundation world model.
+\newblock Blog post, 4 December 2024.
+
+\bibitem{microsoft2025whamm}
+Microsoft Research.
+\newblock WHAMM: Real-time world modelling of interactive environments (Quake II in Copilot Labs).
+\newblock Blog post, 4 April 2025.
+
+\end{thebibliography}
+
+% ============================================================
+\appendix
+\section{Artifact Provenance}
+\label{app:provenance}
+% ============================================================
+
+\texttt{PROVENANCE.md} traces every released file to its training run and epoch, and every dataset statistic to its source.
+
+\paragraph{Models.}
+\begin{itemize}
+  \item The CARLA model is \texttt{world\_v3} epoch 20. Its architecture is verified by output parity ($\le 2.4\cdot10^{-6}$).
+  \item The TinySkies models are VAE (14 epochs) and latent simulator epoch 40. They are verified tensor-for-tensor against the deployed files, with a negative control that does not match.
+  \item The deployed ONNX files are byte-identical to \texttt{artifacts/}.
+\end{itemize}
+
+\paragraph{Training logs.} TinySkies training logs are exported to \texttt{results/<run\_id>/}. The paper does not link to external logging services.
+
+% ============================================================
+\section{Model Lineage}
+\label{app:lineage}
+% ============================================================
+
+\paragraph{CARLA.}\leavevmode\par\smallskip
+
+{\small\noindent\begin{tabularx}{\linewidth}{@{}l Y l@{}}
+    \toprule
+    Version & What it was & Status \\
+    \midrule
+    v1 & $64\times64$ diffusion-style world model & not released \\
+    v2 & history-4, horizon-8 predictor & not released \\
+    \textbf{v3} & \textbf{this report} & released \\
+    v4 & latent transition on a frozen RGB autoencoder, 128-step rollout loss, $\approx$4.0\,M parameters; trained to epoch 5 & not deployed; future work \\
+    \bottomrule
+  \end{tabularx}\par}
+
+\paragraph{TinySkies.}
+\begin{itemize}
+  \item Pixel-space residual predictors (v1/v2).
+  \item A VAE-plus-transformer open-loop 16-step predictor (v3).
+  \item VAEs with dense 128-d and 1,280-d latents, replaced by the $6\times6\times64$ spatial latent.
+  \item A transformer latent simulator, replaced after one epoch by the released GRU.
+\end{itemize}
+
+% ============================================================
+\section{Reproducibility}
+\label{app:repro}
+% ============================================================
+
+{\small
+\begin{verbatim}
+python eval/carla_eval.py --recordings <processed CARLA recordings>
+python eval/carla_sensitivity.py --recordings <...>
+python eval/carla_lidar_probe.py --recordings <...>
+python eval/tinyskies_eval.py --processed <processed TinySkies sessions>
+python eval/latency.py; (cd eval/browser_bench && npm install && node run.mjs)
+python tools/build_notebooks.py    # results/*.ipynb and results/figures/
+python paper/make_figures.py       # paper/figures/
+\end{verbatim}
+}
+
+\noindent Every trainer has a \texttt{--smoke} mode that runs on \texttt{samples/}.
+
+\end{document}

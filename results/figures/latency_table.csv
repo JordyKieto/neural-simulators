@@ -1,0 +1,19 @@
+runtime,measurement,median ms,p90 ms,max steps/s
+python onnxruntime (threads 1),carla_step (transition),6.088,6.219,164.257555847569
+python onnxruntime (threads 1),carla_reset (lidar_encoder),0.13,0.132,7692.307692307692
+python onnxruntime (threads 1),tinyskies_step (latent_sim + decoder),23.734,25.402,42.13364793123788
+python onnxruntime (threads 1),tinyskies_latent_sim,0.501,0.644,1996.007984031936
+python onnxruntime (threads 1),tinyskies_decoder,23.492,24.302,42.56768261535842
+python onnxruntime (threads 1),tinyskies_reset (encoder),1.576,1.637,634.5177664974619
+python onnxruntime (threads 4),carla_step (transition),2.569,3.0,389.25652004671076
+python onnxruntime (threads 4),carla_reset (lidar_encoder),0.07,0.144,14285.714285714284
+python onnxruntime (threads 4),tinyskies_step (latent_sim + decoder),15.61,19.586,64.06149903907752
+python onnxruntime (threads 4),tinyskies_latent_sim,0.354,0.369,2824.858757062147
+python onnxruntime (threads 4),tinyskies_decoder,8.968,9.821,111.50758251561106
+python onnxruntime (threads 4),tinyskies_reset (encoder),0.797,0.83,1254.7051442910915
+browser wasm (1 thread),carla_step (transition),11.735,13.84,85.2151682999574
+browser wasm (1 thread),tinyskies_step (latent_sim + decoder),47.515,50.89,21.04598547827002
+browser wasm (4 threads),carla_step (transition),5.02,12.18,199.20318725099602
+browser wasm (4 threads),tinyskies_step (latent_sim + decoder),18.31,20.12,54.61496450027308
+browser webgpu (1 thread),carla_step (transition),16.355,20.52,61.14338122898196
+browser webgpu,tinyskies_step (latent_sim + decoder),,,

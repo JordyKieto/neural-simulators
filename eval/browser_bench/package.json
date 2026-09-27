@@ -1,0 +1,7 @@
+{
+  "name": "neural-simulator-browser-bench",
+  "private": true,
+  "type": "module",
+  "scripts": { "bench": "node run.mjs" },
+  "dependencies": { "playwright-core": "^1.55.0" }
+}
