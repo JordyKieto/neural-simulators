@@ -12,7 +12,10 @@
   <a href="paper/"><b>📄 Paper</b></a> &nbsp;·&nbsp;
   <a href="results/rollout_eval.ipynb"><b>📈 Evaluation</b></a> &nbsp;·&nbsp;
   <a href="results/latency.ipynb"><b>⏱️ Size &amp; speed</b></a> &nbsp;·&nbsp;
-  <a href="artifacts/"><b>🧠 Models (ONNX / Keras)</b></a>
+  <a href="artifacts/"><b>🧠 Models (ONNX / Keras)</b></a> &nbsp;·&nbsp;
+  <a href="https://huggingface.co/jordykieto/neural-simulators"><b>🤗 Models</b></a> &nbsp;·&nbsp;
+  <a href="https://huggingface.co/datasets/jordykieto/carla-driving-demos"><b>🤗 CARLA data</b></a> &nbsp;·&nbsp;
+  <a href="https://huggingface.co/datasets/jordykieto/tinyskies-gameplay"><b>🤗 TinySkies data</b></a>
 </p>
 
 This project asks whether **small learned world models can stand in for an interactive environment**. The test is not a good next-frame prediction. It is whether the model keeps working when it has to consume its own predictions indefinitely while a human is at the controls.
@@ -155,7 +158,7 @@ frame, telemetry = state["vision"][0], state["telemetry"][0]
 
 ## Data
 
-The full datasets are not redistributed. Sizes are computed by `tools/dataset_stats.py` into [`results/dataset/`](results/dataset):
+The datasets are on Hugging Face: [carla-driving-demos](https://huggingface.co/datasets/jordykieto/carla-driving-demos) (all processed recordings and the raw training recordings) and [tinyskies-gameplay](https://huggingface.co/datasets/jordykieto/tinyskies-gameplay) (the training set and all raw sessions). Sizes are computed by `tools/dataset_stats.py` into [`results/dataset/`](results/dataset):
 
 | | CARLA | TinySkies |
 |---|---|---|
